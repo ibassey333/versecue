@@ -43,25 +43,6 @@ export interface TranscriptSegment {
   confidence?: number;
 }
 
-export interface AudioDevice {
-  deviceId: string;
-  label: string;
-  kind: 'audioinput';
-}
-
-export interface SessionSettings {
-  translation: string;
-  autoApproveHighConfidence: boolean;
-  keyboardShortcutsEnabled: boolean;
-  theme: 'dark' | 'light';
-}
-
-export interface VerseData {
-  reference: string;
-  text: string;
-  translation: string;
-}
-
 export interface BibleVerse {
   reference: string;
   text: string;
@@ -80,4 +61,11 @@ export interface BookMetadata {
   chapters: number;
   versesPerChapter?: number[];
   testament: 'old' | 'new';
+}
+
+
+export interface AudioDevice {
+  deviceId: string;
+  label: string;
+  kind: 'audioinput';
 }

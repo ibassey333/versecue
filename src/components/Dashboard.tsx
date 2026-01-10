@@ -1,402 +1,404 @@
-"use client";
+'use client';
 
-import { useRef, useCallback, useState } from 'react';
-import { BookOpen, Keyboard, HelpCircle, Mic, MicOff, Pause, Play, Settings, Volume2, Clock, History } from 'lucide-react';
-import { cn, formatTime } from '@/lib/utils';
+import { useEffect, useState, useRef } from 'react';
 import { useSessionStore } from '@/stores/session';
-import { useKeyboardShortcuts, SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
-import { useAudioCapture } from '@/hooks/useAudioCapture';
 import { detectScriptures } from '@/lib/detection';
-import { TranscriptSegment, AudioDevice, QueueItem } from '@/types';
 
-// ============================================
-// Sub-components
-// ============================================
-
-function AudioControls({ devices, isSupported, error, audioLevel, className }: {
-  devices: AudioDevice[];
-  isSupported: boolean;
-  error: string | null;
-  audioLevel: number;
-  className?: string;
-}) {
-  const [showSettings, setShowSettings] = useState(false);
-  const { isListening, isPaused, selectedAudioDevice, toggleListening, togglePause, setAudioDevice } = useSessionStore();
-  
-  const levelBars = 20;
-  const activeBars = Math.floor(audioLevel * levelBars);
-  
-  return (
-    <div className={cn('rounded-xl border border-verse-border bg-verse-surface p-5', className)}>
-      <div className="flex items-center gap-4 flex-wrap">
-        <button
-          onClick={toggleListening}
-          disabled={!isSupported}
-          className={cn(
-            'flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300',
-            isListening ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-green-500 text-white hover:bg-green-600',
-            !isSupported && 'opacity-50 cursor-not-allowed'
-          )}
-        >
-          {isListening ? <><MicOff className="w-5 h-5" /><span>Stop Listening</span><span className="w-2 h-2 rounded-full bg-white animate-pulse" /></> : <><Mic className="w-5 h-5" /><span>Start Listening</span></>}
-        </button>
-        
-        {isListening && (
-          <button onClick={togglePause} className={cn('flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm border transition-all', isPaused ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-verse-border/50 border-verse-border text-verse-text')}>
-            {isPaused ? <><Play className="w-4 h-4" /><span>Resume</span></> : <><Pause className="w-4 h-4" /><span>Pause</span></>}
-          </button>
-        )}
-        
-        {isListening && (
-          <div className="flex items-center gap-3 px-4">
-            <Volume2 className="w-4 h-4 text-verse-muted" />
-            <div className="flex items-end gap-0.5 h-6">
-              {Array.from({ length: levelBars }).map((_, i) => (
-                <div key={i} className={cn('w-1 rounded-full transition-all duration-75', i < activeBars ? (i < levelBars * 0.6 ? 'bg-green-500' : i < levelBars * 0.85 ? 'bg-yellow-500' : 'bg-red-500') : 'bg-verse-border')} style={{ height: `${((i + 1) / levelBars) * 100}%` }} />
-              ))}
-            </div>
-          </div>
-        )}
-        
-        <button onClick={() => setShowSettings(!showSettings)} className={cn('p-3 rounded-xl transition-colors text-verse-muted hover:text-verse-text', showSettings && 'bg-verse-border text-verse-text')}>
-          <Settings className="w-5 h-5" />
-        </button>
-      </div>
-      
-      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-      
-      {showSettings && (
-        <div className="mt-4 pt-4 border-t border-verse-border">
-          <label className="block">
-            <span className="text-xs font-medium text-verse-subtle uppercase tracking-wide">Audio Input Device</span>
-            <select value={selectedAudioDevice || ''} onChange={(e) => setAudioDevice(e.target.value)} className="mt-2 w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text text-sm">
-              {devices.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
-            </select>
-          </label>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TranscriptPanel({ className }: { className?: string }) {
-  const transcript = useSessionStore((s) => s.transcript);
-  const interimTranscript = useSessionStore((s) => s.interimTranscript);
-  const isListening = useSessionStore((s) => s.isListening);
-  const isPaused = useSessionStore((s) => s.isPaused);
-  
-  return (
-    <div className={cn('flex flex-col rounded-xl border border-verse-border bg-verse-surface', className)}>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
-        <div className="flex items-center gap-3">
-          <div className={cn('w-2.5 h-2.5 rounded-full', isListening && !isPaused ? 'bg-red-500 animate-pulse' : 'bg-verse-muted')} />
-          <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Live Transcript</h3>
-        </div>
-        {isPaused && <span className="text-xs font-medium text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full">Paused</span>}
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-5 min-h-[200px] max-h-[400px]">
-        {transcript.length === 0 && !interimTranscript ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <div className="text-4xl mb-4 opacity-50">🎤</div>
-            <p className="text-verse-subtle text-sm">{isListening ? 'Listening for speech...' : 'Click "Start Listening" to begin'}</p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {transcript.map((seg) => <span key={seg.id} className="text-verse-text font-body text-[15px] leading-relaxed">{seg.text} </span>)}
-            {interimTranscript && <span className="text-verse-subtle font-body text-[15px] italic">{interimTranscript}</span>}
-          </div>
-        )}
-      </div>
-      
-      <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50 rounded-b-xl">
-        <span className="text-xs text-verse-subtle">{transcript.length} segments</span>
-      </div>
-    </div>
-  );
-}
-
-function DetectionQueue({ className }: { className?: string }) {
-  const pendingQueue = useSessionStore((s) => s.pendingQueue);
-  const approveDetection = useSessionStore((s) => s.approveDetection);
-  const dismissDetection = useSessionStore((s) => s.dismissDetection);
-  
-  return (
-    <div className={cn('flex flex-col rounded-xl border border-verse-border bg-verse-surface', className)}>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
-        <div className="flex items-center gap-3">
-          <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Needs Review</h3>
-          {pendingQueue.length > 0 && <span className="flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-verse-bg bg-yellow-500 rounded-full">{pendingQueue.length}</span>}
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 min-h-[150px] max-h-[300px]">
-        {pendingQueue.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-            <div className="text-3xl mb-3 opacity-50">✓</div>
-            <p className="text-verse-subtle text-sm">Low-confidence detections appear here</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {pendingQueue.map((item) => (
-              <div key={item.id} className="rounded-xl border border-yellow-500/30 bg-verse-elevated p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500 uppercase">{item.confidence}</span>
-                  <span className="text-[10px] text-verse-muted">{item.detectionType}</span>
-                </div>
-                <h4 className="font-display text-lg font-semibold text-gold-400 mb-2">{item.reference.reference}</h4>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => approveDetection(item.id)} className="flex-1 px-3 py-2 rounded-lg bg-green-500 text-white text-sm font-medium">Approve</button>
-                  <button onClick={() => dismissDetection(item.id)} className="px-3 py-2 rounded-lg bg-verse-border text-verse-subtle text-sm">Dismiss</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ApprovedQueue() {
-  const approvedQueue = useSessionStore((s) => s.approvedQueue);
-  const displayScripture = useSessionStore((s) => s.displayScripture);
-  
-  return (
-    <div className="flex flex-col rounded-xl border border-verse-border bg-verse-surface">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
-        <div className="flex items-center gap-3">
-          <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Ready to Display</h3>
-          {approvedQueue.length > 0 && <span className="flex items-center justify-center min-w-[24px] h-6 px-2 text-xs font-bold text-verse-bg bg-green-500 rounded-full">{approvedQueue.length}</span>}
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 min-h-[150px] max-h-[300px]">
-        {approvedQueue.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-            <div className="text-3xl mb-3 opacity-50">📋</div>
-            <p className="text-verse-subtle text-sm">Approved scriptures appear here</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {approvedQueue.map((item) => (
-              <div key={item.id} className="flex items-center gap-4 p-4 rounded-xl bg-verse-elevated border border-green-500/30">
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-display text-lg font-semibold text-green-500">{item.reference.reference}</h4>
-                  {item.verseText && <p className="text-xs text-verse-muted mt-1 truncate">{item.verseText.substring(0, 60)}...</p>}
-                </div>
-                <button onClick={() => displayScripture(item.id)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-500 text-verse-bg font-semibold text-sm hover:bg-gold-400">
-                  Display <kbd className="text-[10px] opacity-60">↵</kbd>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DetectionHistory() {
-  const detectionHistory = useSessionStore((s) => s.detectionHistory);
-  
-  return (
-    <div className="flex flex-col rounded-xl border border-verse-border bg-verse-surface">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
-        <div className="flex items-center gap-3">
-          <History className="w-4 h-4 text-verse-muted" />
-          <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Session Log</h3>
-          <span className="text-xs text-verse-muted">{detectionHistory.length}</span>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 max-h-[200px]">
-        {detectionHistory.length === 0 ? (
-          <p className="text-verse-subtle text-sm text-center py-4">Detected scriptures will appear here</p>
-        ) : (
-          <div className="space-y-2">
-            {detectionHistory.slice().reverse().map((item) => (
-              <div key={item.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-verse-bg/50">
-                <div className="flex items-center gap-3">
-                  <span className={cn('w-2 h-2 rounded-full', item.confidence === 'high' ? 'bg-green-500' : item.confidence === 'medium' ? 'bg-yellow-500' : 'bg-gray-500')} />
-                  <span className="font-medium text-sm text-verse-text">{item.reference.reference}</span>
-                  <span className="text-[10px] text-verse-muted bg-verse-border px-1.5 py-0.5 rounded">{item.detectionType}</span>
-                </div>
-                <span className="text-[10px] text-verse-muted">{formatTime(item.detectedAt)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DisplayPreview() {
-  const currentDisplay = useSessionStore((s) => s.currentDisplay);
-  const clearDisplay = useSessionStore((s) => s.clearDisplay);
-  
-  return (
-    <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
-        <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Display Preview</h3>
-        <a href="/display" target="_blank" className="text-xs text-verse-subtle hover:text-verse-text">Open Display ↗</a>
-      </div>
-      
-      <div className="relative aspect-video bg-verse-bg">
-        {currentDisplay ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-            <h2 className="font-display text-2xl font-bold text-gold-400 mb-4">{currentDisplay.reference.reference}</h2>
-            {currentDisplay.verseText && <p className="font-scripture text-sm text-verse-text leading-relaxed max-w-md">"{currentDisplay.verseText}"</p>}
-            {currentDisplay.translation && <span className="mt-3 text-[10px] text-verse-muted uppercase">{currentDisplay.translation}</span>}
-            <button onClick={clearDisplay} className="absolute top-3 right-3 p-2 rounded-lg bg-verse-surface/80 text-verse-muted hover:text-verse-text text-sm">✕</button>
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div className="text-4xl mb-3 opacity-30">📺</div>
-            <p className="text-verse-muted text-sm">No scripture displayed</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SessionStats() {
-  const stats = useSessionStore((s) => s.stats);
-  return (
-    <div className="rounded-xl border border-verse-border bg-verse-surface p-4">
-      <h3 className="font-body text-xs font-semibold text-verse-subtle tracking-wide uppercase mb-4">Session Stats</h3>
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Detected', value: stats.detected, color: 'text-gold-400' },
-          { label: 'Approved', value: stats.approved, color: 'text-green-500' },
-          { label: 'Displayed', value: stats.displayed, color: 'text-blue-400' },
-          { label: 'Dismissed', value: stats.dismissed, color: 'text-verse-muted' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="flex flex-col items-center p-3 rounded-lg bg-verse-bg">
-            <span className={cn('text-xl font-bold', color)}>{value}</span>
-            <span className="text-[10px] text-verse-muted uppercase">{label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ManualSearch({ inputRef }: { inputRef: React.RefObject<HTMLInputElement> }) {
-  const [query, setQuery] = useState('');
-  return (
-    <div className="rounded-xl border border-verse-border bg-verse-surface p-4">
-      <input ref={inputRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search scripture... (e.g., John 3:16)" className="w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text placeholder:text-verse-muted text-sm" />
-      <p className="mt-2 text-[11px] text-verse-muted">Press <kbd className="px-1.5 py-0.5 rounded bg-verse-border font-mono text-[10px]">/</kbd> to focus</p>
-    </div>
-  );
-}
-
-// ============================================
-// Main Dashboard
-// ============================================
 export default function Dashboard() {
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const [showHelp, setShowHelp] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-  
-  const isListening = useSessionStore((s) => s.isListening);
-  const isPaused = useSessionStore((s) => s.isPaused);
-  const settings = useSessionStore((s) => s.settings);
-  const addDetection = useSessionStore((s) => s.addDetection);
-  const addTranscriptSegment = useSessionStore((s) => s.addTranscriptSegment);
-  const setInterimTranscript = useSessionStore((s) => s.setInterimTranscript);
-  const setStoreAudioLevel = useSessionStore((s) => s.setAudioLevel);
-  
-  const handleTranscript = useCallback(async (segment: TranscriptSegment) => {
-    addTranscriptSegment(segment);
-    if (isPaused) return;
-    const detections = await detectScriptures(segment.text, { fetchVerses: true });
-    for (const detection of detections) addDetection(detection);
-  }, [addDetection, addTranscriptSegment, isPaused]);
-  
-  const handleInterim = useCallback((text: string) => setInterimTranscript(text), [setInterimTranscript]);
-  const handleAudioError = useCallback((error: Error) => console.error('Audio error:', error), []);
-  const handleLevelChange = useCallback((level: number) => { setAudioLevel(level); setStoreAudioLevel(level); }, [setStoreAudioLevel]);
-  
-  const { devices, isSupported, error: audioError } = useAudioCapture({ onTranscript: handleTranscript, onInterim: handleInterim, onError: handleAudioError, onLevelChange: handleLevelChange });
-  
-  useKeyboardShortcuts({ enabled: settings.keyboardShortcutsEnabled, onSearch: () => searchInputRef.current?.focus() });
-  
+  const store = useSessionStore();
+  const {
+    isListening,
+    isPaused,
+    transcript,
+    interimTranscript,
+    detectionQueue,
+    approvedQueue,
+    currentDisplay,
+    audioLevel,
+    stats,
+    settings,
+    toggleListening,
+    togglePause,
+    addTranscriptSegment,
+    setInterimTranscript,
+    setAudioLevel,
+    addDetection,
+    approveDetection,
+    dismissDetection,
+    displayScripture,
+    clearDisplay,
+    goToNextVerse,
+    goToPrevVerse,
+    removeFromApproved,
+    updateSettings,
+  } = store;
+
+  const [showSettings, setShowSettings] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+
+  // Speech recognition
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognitionRef.current = recognition;
+
+    let isStoppingRef = false;
+
+    recognition.onresult = async (event: any) => {
+      let interim = '';
+      let finalText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const text = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += text;
+        } else {
+          interim += text;
+        }
+      }
+
+      if (interim) setInterimTranscript(interim);
+
+      if (finalText) {
+        addTranscriptSegment({
+          id: `seg_${Date.now()}`,
+          text: finalText,
+          timestamp: new Date(),
+          isFinal: true,
+        });
+
+        const detections = await detectScriptures(finalText);
+        detections.forEach(d => addDetection(d));
+      }
+    };
+
+    recognition.onerror = () => {};
+    recognition.onend = () => {
+      if (isListening && !isPaused && !isStoppingRef) {
+        setTimeout(() => { try { recognition.start(); } catch(e) {} }, 100);
+      }
+    };
+
+    if (isListening && !isPaused) {
+      try { recognition.start(); } catch(e) {}
+    }
+
+    return () => {
+      isStoppingRef = true;
+      try { recognition.stop(); } catch(e) {}
+    };
+  }, [isListening, isPaused]);
+
+  // Audio level meter
+  useEffect(() => {
+    if (!isListening) {
+      setAudioLevel(0);
+      return;
+    }
+
+    let animationId: number;
+    
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyser.fftSize = 256;
+      
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const updateLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setAudioLevel(Math.min(100, avg * 1.5));
+        animationId = requestAnimationFrame(updateLevel);
+      };
+      updateLevel();
+    }).catch(() => {});
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      audioContextRef.current?.close();
+    };
+  }, [isListening]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.repeat && approvedQueue.length > 0) {
+        e.preventDefault();
+        displayScripture(approvedQueue[0].id);
+      }
+      if (e.key === 'Escape') clearDisplay();
+      if (e.key === 'ArrowRight' && currentDisplay) goToNextVerse();
+      if (e.key === 'ArrowLeft' && currentDisplay) goToPrevVerse();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [approvedQueue, currentDisplay]);
+
+  const formatTime = (date: Date) => new Date(date).toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+
   return (
-    <div className="min-h-screen bg-verse-bg">
-      <header className="sticky top-0 z-50 border-b border-verse-border bg-verse-bg/80 backdrop-blur-xl">
-        <div className="max-w-[1800px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-gold-400 to-gold-600">
-                <BookOpen className="w-5 h-5 text-verse-bg" />
-              </div>
-              <div>
-                <h1 className="font-display text-xl font-bold text-gold-400">VerseCue</h1>
-                <p className="text-[10px] text-verse-muted uppercase tracking-wider">Scripture Detection</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Header */}
+      <header className="border-b border-slate-700/50 bg-slate-900/50 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
+              <span className="text-slate-900 text-lg font-bold">📖</span>
             </div>
-            <div className="flex items-center gap-4">
-              <div className={cn('flex items-center gap-2 px-4 py-2 rounded-full', isListening && !isPaused ? 'bg-red-500/10 text-red-500' : isPaused ? 'bg-yellow-500/10 text-yellow-500' : 'bg-verse-border/50 text-verse-muted')}>
-                <div className={cn('w-2 h-2 rounded-full', isListening && !isPaused ? 'bg-red-500 animate-pulse' : isPaused ? 'bg-yellow-500' : 'bg-verse-muted')} />
-                <span className="text-sm font-medium">{isListening && !isPaused ? 'Listening' : isPaused ? 'Paused' : 'Ready'}</span>
-              </div>
-              <button onClick={() => setShowHelp(!showHelp)} className={cn('p-2 rounded-lg text-verse-muted hover:text-verse-text', showHelp && 'bg-verse-border text-verse-text')}>
-                <HelpCircle className="w-5 h-5" />
-              </button>
+            <div>
+              <h1 className="text-xl font-semibold text-white">VerseCue</h1>
+              <p className="text-xs text-slate-400">SCRIPTURE DETECTION</p>
             </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+              isListening ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-700 text-slate-400'
+            }`}>
+              <span className={`inline-block w-2 h-2 rounded-full mr-2 ${isListening ? 'bg-green-400 animate-pulse' : 'bg-slate-500'}`}></span>
+              {isListening ? 'Live' : 'Ready'}
+            </div>
+            <a href="/display" target="_blank" className="text-amber-400 hover:text-amber-300 text-sm font-medium">
+              Open Display ↗
+            </a>
+            <button onClick={() => setShowSettings(!showSettings)} className="p-2 text-slate-400 hover:text-white">
+              ⚙️
+            </button>
           </div>
         </div>
       </header>
-      
-      {showHelp && (
-        <div className="border-b border-verse-border bg-verse-surface/50">
-          <div className="max-w-[1800px] mx-auto px-6 py-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Keyboard className="w-4 h-4 text-gold-400" />
-              <h3 className="font-semibold text-sm text-verse-text">Keyboard Shortcuts</h3>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="bg-slate-800 border-b border-slate-700 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex gap-6 items-center">
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={settings.autoApprove}
+                onChange={(e) => updateSettings({ autoApprove: e.target.checked })}
+                className="rounded"
+              />
+              Auto-approve high confidence
+            </label>
+            <span className="text-slate-500">|</span>
+            <span className="text-sm text-slate-400">Translation: KJV</span>
+          </div>
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={toggleListening}
+            className={`px-6 py-3 rounded-xl font-medium flex items-center gap-2 transition-all ${
+              isListening
+                ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                : 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900 hover:from-amber-400 hover:to-amber-500'
+            }`}
+          >
+            {isListening ? '⏹ Stop Listening' : '🎤 Start Listening'}
+          </button>
+          
+          {isListening && (
+            <>
+              <button
+                onClick={togglePause}
+                className="px-4 py-3 rounded-xl bg-slate-700 text-slate-300 hover:bg-slate-600"
+              >
+                {isPaused ? '▶ Resume' : '⏸ Pause'}
+              </button>
+              
+              {/* Audio Level Meter */}
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 text-sm">🎙</span>
+                <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-green-500 to-amber-500 transition-all duration-75"
+                    style={{ width: `${audioLevel}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Main Grid */}
+      <div className="max-w-7xl mx-auto px-4 pb-8 grid grid-cols-3 gap-6">
+        {/* Column 1: Transcript */}
+        <div className="space-y-4">
+          <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50">
+            <h2 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isListening && !isPaused ? 'bg-green-500 animate-pulse' : 'bg-slate-600'}`}></span>
+              LIVE TRANSCRIPT
+            </h2>
+            <div className="h-80 overflow-y-auto space-y-2 text-slate-300 text-sm leading-relaxed">
+              {transcript.map((seg) => (
+                <p key={seg.id}>{seg.text}</p>
+              ))}
+              {interimTranscript && (
+                <p className="text-slate-500 italic">{interimTranscript}</p>
+              )}
+              {transcript.length === 0 && !interimTranscript && (
+                <p className="text-slate-600 italic text-center py-8">
+                  Transcript will appear here as you speak...
+                </p>
+              )}
             </div>
-            <div className="flex flex-wrap gap-4">
-              {SHORTCUTS.map(({ key, action }) => (
-                <div key={key} className="flex items-center gap-2">
-                  <kbd className="px-2 py-1 rounded bg-verse-border text-verse-text font-mono text-xs">{key}</kbd>
-                  <span className="text-sm text-verse-subtle">{action}</span>
+            <div className="mt-3 pt-3 border-t border-slate-700/50 text-xs text-slate-500">
+              {transcript.length} segments
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+            <input
+              type="text"
+              placeholder="Search scripture... (e.g., John 3:16)"
+              className="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            />
+            <p className="text-xs text-slate-500 mt-2">Press / to focus</p>
+          </div>
+        </div>
+
+        {/* Column 2: Detection Queues */}
+        <div className="space-y-4">
+          {/* Needs Review */}
+          <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50">
+            <h2 className="text-sm font-medium text-slate-400 mb-4">NEEDS REVIEW</h2>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {detectionQueue.length === 0 ? (
+                <div className="text-center py-6 text-slate-600">
+                  <div className="text-3xl mb-2">✓</div>
+                  <p className="text-sm">Low-confidence detections appear here</p>
+                </div>
+              ) : detectionQueue.map((item) => (
+                <div key={item.id} className="flex items-center justify-between bg-slate-700/50 rounded-xl p-3">
+                  <span className="text-amber-400 font-medium">{item.reference.reference}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => approveDetection(item.id)} className="w-8 h-8 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30">✓</button>
+                    <button onClick={() => dismissDetection(item.id)} className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Ready to Display */}
+          <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50">
+            <h2 className="text-sm font-medium text-slate-400 mb-4">
+              READY TO DISPLAY <span className="text-amber-400 ml-1">{approvedQueue.length}</span>
+            </h2>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {approvedQueue.length === 0 ? (
+                <div className="text-center py-6 text-slate-600">
+                  <div className="text-3xl mb-2">📋</div>
+                  <p className="text-sm">Approved scriptures appear here</p>
+                </div>
+              ) : approvedQueue.map((item) => (
+                <div key={item.id} className={`rounded-xl p-3 ${item.displayedAt ? 'bg-slate-700/30' : 'bg-slate-700/50'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-amber-400 font-medium">{item.reference.reference}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => displayScripture(item.id)}
+                        className="px-3 py-1.5 bg-amber-500/20 text-amber-400 rounded-lg text-sm hover:bg-amber-500/30"
+                      >
+                        {item.displayedAt ? 'Re-display' : 'Display'} ↵
+                      </button>
+                      <button
+                        onClick={() => removeFromApproved(item.id)}
+                        className="text-slate-500 hover:text-red-400"
+                      >✕</button>
+                    </div>
+                  </div>
+                  {item.verseText && (
+                    <p className="text-slate-400 text-sm truncate">{item.verseText.slice(0, 80)}...</p>
+                  )}
+                  {item.displayedAt && (
+                    <span className="text-xs text-green-500">✓ Shown at {formatTime(item.displayedAt)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-600 mt-3">Enter = display first • ← → = navigate verses</p>
+          </div>
+        </div>
+
+        {/* Column 3: Display Preview + Stats */}
+        <div className="space-y-4">
+          {/* Display Preview */}
+          <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-medium text-slate-400">DISPLAY PREVIEW</h2>
+              {currentDisplay && (
+                <button onClick={clearDisplay} className="text-slate-500 hover:text-red-400 text-sm">
+                  Clear ✕
+                </button>
+              )}
+            </div>
+            <div className="bg-slate-900 rounded-xl p-6 min-h-56 flex items-center justify-center">
+              {currentDisplay ? (
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold text-amber-400 mb-4">{currentDisplay.reference.reference}</h3>
+                  {currentDisplay.verseText && (
+                    <p className="text-slate-300 italic text-sm leading-relaxed">"{currentDisplay.verseText}"</p>
+                  )}
+                  <p className="text-slate-600 text-xs mt-4">{currentDisplay.translation}</p>
+                  <div className="flex justify-center gap-2 mt-4">
+                    <button onClick={goToPrevVerse} className="px-3 py-1.5 bg-slate-700 rounded-lg text-sm hover:bg-slate-600">← Prev</button>
+                    <button onClick={goToNextVerse} className="px-3 py-1.5 bg-slate-700 rounded-lg text-sm hover:bg-slate-600">Next →</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-600">Nothing displayed</p>
+              )}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700/50">
+            <h2 className="text-sm font-medium text-slate-400 mb-4">SESSION STATS</h2>
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Detected', value: stats.detected, color: 'amber' },
+                { label: 'Approved', value: stats.approved, color: 'green' },
+                { label: 'Displayed', value: stats.displayed, color: 'blue' },
+                { label: 'Dismissed', value: stats.dismissed, color: 'slate' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-slate-700/50 rounded-xl p-3 text-center">
+                  <div className={`text-2xl font-bold text-${color}-400`}>{value}</div>
+                  <div className="text-xs text-slate-500 mt-1">{label}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      )}
-      
-      <main className="max-w-[1800px] mx-auto px-6 py-6">
-        <AudioControls devices={devices} isSupported={isSupported} error={audioError} audioLevel={audioLevel} className="mb-6" />
-        
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12 lg:col-span-4 space-y-6">
-            <TranscriptPanel className="h-[400px]" />
-            <ManualSearch inputRef={searchInputRef} />
-          </div>
-          <div className="col-span-12 lg:col-span-4 space-y-6">
-            <DetectionQueue className="min-h-[200px]" />
-            <ApprovedQueue />
-            <DetectionHistory />
-          </div>
-          <div className="col-span-12 lg:col-span-4 space-y-6">
-            <DisplayPreview />
-            <SessionStats />
-          </div>
-        </div>
-      </main>
-      
-      <footer className="border-t border-verse-border mt-12">
-        <div className="max-w-[1800px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between text-xs text-verse-muted">
-            <span>VerseCue v1.1.0</span>
-            <span>The right verse, right on time.</span>
-          </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-700/50 bg-slate-900/50">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between text-xs text-slate-500">
+          <span>VerseCue v1.0.0</span>
+          <span>The right verse, right on time.</span>
         </div>
       </footer>
     </div>

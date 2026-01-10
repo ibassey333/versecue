@@ -18,7 +18,7 @@ interface ShortcutConfig {
 
 export function useKeyboardShortcuts(config: ShortcutConfig) {
   const {
-    pendingQueue,
+    detectionQueue,
     approvedQueue,
     currentDisplay,
     approveDetection,
@@ -43,8 +43,8 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
       case 'Enter':
         event.preventDefault();
         // If there's something in pending, approve it
-        if (pendingQueue.length > 0) {
-          approveDetection(pendingQueue[0].id);
+        if (detectionQueue.length > 0) {
+          approveDetection(detectionQueue[0].id);
           config.onApprove?.();
         }
         // Else if there's something approved, display it
@@ -62,8 +62,8 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
           config.onClearDisplay?.();
         }
         // Else if there's something pending, dismiss it
-        else if (pendingQueue.length > 0) {
-          dismissDetection(pendingQueue[0].id);
+        else if (detectionQueue.length > 0) {
+          dismissDetection(detectionQueue[0].id);
           config.onDismiss?.();
         }
         break;
@@ -94,7 +94,7 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
     }
   }, [
     config,
-    pendingQueue,
+    detectionQueue,
     approvedQueue,
     currentDisplay,
     approveDetection,

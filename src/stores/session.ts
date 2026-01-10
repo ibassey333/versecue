@@ -1,10 +1,11 @@
 // ============================================
-// Session Store (v1.1)
+// Session Store v1.3.1
 // ============================================
 
 import { create } from 'zustand';
-import { DetectionResult, QueueItem, TranscriptSegment, SessionSettings } from '@/types';
+import { DetectionResult, QueueItem, TranscriptSegment } from '@/types';
 import { broadcastDisplay, broadcastClear } from '@/lib/broadcast';
+import { fetchVerse } from '@/lib/bible';
 
 interface SessionState {
   sessionId: string | null;
@@ -15,13 +16,14 @@ interface SessionState {
   audioLevel: number;
   transcript: TranscriptSegment[];
   interimTranscript: string;
-  pendingQueue: QueueItem[];
+  detectionQueue: QueueItem[];
   approvedQueue: QueueItem[];
   currentDisplay: QueueItem | null;
-  detectionHistory: QueueItem[];
-  displayHistory: QueueItem[];
   stats: { detected: number; approved: number; displayed: number; dismissed: number };
-  settings: SessionSettings;
+  settings: {
+    autoApprove: boolean;
+    translation: string;
+  };
   
   startSession: () => void;
   endSession: () => void;
@@ -36,8 +38,10 @@ interface SessionState {
   dismissDetection: (id: string) => void;
   displayScripture: (id: string) => void;
   clearDisplay: () => void;
-  updateSettings: (settings: Partial<SessionSettings>) => void;
-  getExportData: () => unknown;
+  goToNextVerse: () => Promise<void>;
+  goToPrevVerse: () => Promise<void>;
+  removeFromApproved: (id: string) => void;
+  updateSettings: (settings: Partial<SessionState['settings']>) => void;
 }
 
 const AUTO_APPROVE_THRESHOLD = 0.85;
@@ -51,27 +55,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   audioLevel: 0,
   transcript: [],
   interimTranscript: '',
-  pendingQueue: [],
+  detectionQueue: [],
   approvedQueue: [],
   currentDisplay: null,
-  detectionHistory: [],
-  displayHistory: [],
   stats: { detected: 0, approved: 0, displayed: 0, dismissed: 0 },
   settings: {
+    autoApprove: true,
     translation: 'KJV',
-    autoApproveHighConfidence: true,
-    keyboardShortcutsEnabled: true,
-    theme: 'dark',
   },
   
   startSession: () => set({
     sessionId: `session_${Date.now()}`,
     startedAt: new Date(),
     transcript: [],
-    pendingQueue: [],
+    detectionQueue: [],
     approvedQueue: [],
-    detectionHistory: [],
-    displayHistory: [],
     currentDisplay: null,
     stats: { detected: 0, approved: 0, displayed: 0, dismissed: 0 },
   }),
@@ -84,10 +82,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ isListening: !isListening });
   },
   
-  togglePause: () => set((state) => ({ isPaused: !state.isPaused })),
+  togglePause: () => set((s) => ({ isPaused: !s.isPaused })),
   setAudioDevice: (deviceId) => set({ selectedAudioDevice: deviceId }),
   setAudioLevel: (level) => set({ audioLevel: level }),
-  addTranscriptSegment: (segment) => set((state) => ({ transcript: [...state.transcript, segment], interimTranscript: '' })),
+  addTranscriptSegment: (segment) => set((s) => ({ 
+    transcript: [...s.transcript, segment], 
+    interimTranscript: '' 
+  })),
   setInterimTranscript: (text) => set({ interimTranscript: text }),
   
   addDetection: (detection) => {
@@ -103,19 +104,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       detectedAt: detection.detectedAt,
     };
     
-    const shouldAutoApprove = settings.autoApproveHighConfidence && detection.confidenceScore >= AUTO_APPROVE_THRESHOLD;
+    const shouldAutoApprove = settings.autoApprove && detection.confidenceScore >= AUTO_APPROVE_THRESHOLD;
     
     set((state) => {
+      // Check duplicates
+      const exists = [...state.approvedQueue, ...state.detectionQueue]
+        .some(q => q.reference.reference === item.reference.reference);
+      if (exists) return state;
+      
       if (shouldAutoApprove) {
         return {
-          detectionHistory: [...state.detectionHistory, item],
-          approvedQueue: [...state.approvedQueue, item],
+          approvedQueue: [item, ...state.approvedQueue],
           stats: { ...state.stats, detected: state.stats.detected + 1, approved: state.stats.approved + 1 },
         };
       } else {
         return {
-          detectionHistory: [...state.detectionHistory, item],
-          pendingQueue: [...state.pendingQueue, item],
+          detectionQueue: [item, ...state.detectionQueue],
           stats: { ...state.stats, detected: state.stats.detected + 1 },
         };
       }
@@ -123,38 +127,119 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
   
   approveDetection: (id) => set((state) => {
-    const item = state.pendingQueue.find((i) => i.id === id);
+    const item = state.detectionQueue.find((i) => i.id === id);
     if (!item) return state;
     return {
-      pendingQueue: state.pendingQueue.filter((i) => i.id !== id),
-      approvedQueue: [...state.approvedQueue, item],
+      detectionQueue: state.detectionQueue.filter((i) => i.id !== id),
+      approvedQueue: [item, ...state.approvedQueue],
       stats: { ...state.stats, approved: state.stats.approved + 1 },
     };
   }),
   
   dismissDetection: (id) => set((state) => ({
-    pendingQueue: state.pendingQueue.filter((i) => i.id !== id),
+    detectionQueue: state.detectionQueue.filter((i) => i.id !== id),
     stats: { ...state.stats, dismissed: state.stats.dismissed + 1 },
   })),
   
+  // Display and KEEP in approved queue (mark as shown)
   displayScripture: (id) => {
     const state = get();
     const item = state.approvedQueue.find((i) => i.id === id);
     if (!item) return;
+    
     const displayItem = { ...item, displayedAt: new Date() };
     broadcastDisplay(displayItem);
-    set((state) => ({
-      approvedQueue: state.approvedQueue.filter((i) => i.id !== id),
+    
+    set((s) => ({
       currentDisplay: displayItem,
-      displayHistory: [...state.displayHistory, displayItem],
-      stats: { ...state.stats, displayed: state.stats.displayed + 1 },
+      approvedQueue: s.approvedQueue.map(q => 
+        q.id === id ? { ...q, displayedAt: new Date() } : q
+      ),
+      stats: { ...s.stats, displayed: s.stats.displayed + 1 },
     }));
   },
   
-  clearDisplay: () => { broadcastClear(); set({ currentDisplay: null }); },
-  updateSettings: (newSettings) => set((state) => ({ settings: { ...state.settings, ...newSettings } })),
-  getExportData: () => {
-    const state = get();
-    return { sessionId: state.sessionId, startedAt: state.startedAt, endedAt: new Date(), transcript: state.transcript, scriptures: state.displayHistory, stats: state.stats };
+  clearDisplay: () => { 
+    broadcastClear(); 
+    set({ currentDisplay: null }); 
   },
+  
+  // Go to NEXT verse (single verse, not cumulative)
+  goToNextVerse: async () => {
+    const { currentDisplay, settings } = get();
+    if (!currentDisplay) return;
+    
+    const ref = currentDisplay.reference;
+    const nextVerseNum = (ref.verseEnd || ref.verseStart || 1) + 1;
+    
+    const nextRef = {
+      book: ref.book,
+      chapter: ref.chapter,
+      verseStart: nextVerseNum,
+      verseEnd: null,
+      reference: `${ref.book} ${ref.chapter}:${nextVerseNum}`,
+    };
+    
+    const verse = await fetchVerse(nextRef, settings.translation);
+    if (!verse || !verse.text) return;
+    
+    const newItem: QueueItem = {
+      id: `nav_${Date.now()}`,
+      reference: nextRef,
+      verseText: verse.text,
+      translation: settings.translation,
+      confidence: 'high',
+      confidenceScore: 1,
+      detectionType: 'deterministic',
+      detectedAt: new Date(),
+      displayedAt: new Date(),
+    };
+    
+    broadcastDisplay(newItem);
+    set({ currentDisplay: newItem });
+  },
+  
+  // Go to PREVIOUS verse
+  goToPrevVerse: async () => {
+    const { currentDisplay, settings } = get();
+    if (!currentDisplay) return;
+    
+    const ref = currentDisplay.reference;
+    const prevVerseNum = (ref.verseStart || 1) - 1;
+    if (prevVerseNum < 1) return;
+    
+    const prevRef = {
+      book: ref.book,
+      chapter: ref.chapter,
+      verseStart: prevVerseNum,
+      verseEnd: null,
+      reference: `${ref.book} ${ref.chapter}:${prevVerseNum}`,
+    };
+    
+    const verse = await fetchVerse(prevRef, settings.translation);
+    if (!verse || !verse.text) return;
+    
+    const newItem: QueueItem = {
+      id: `nav_${Date.now()}`,
+      reference: prevRef,
+      verseText: verse.text,
+      translation: settings.translation,
+      confidence: 'high',
+      confidenceScore: 1,
+      detectionType: 'deterministic',
+      detectedAt: new Date(),
+      displayedAt: new Date(),
+    };
+    
+    broadcastDisplay(newItem);
+    set({ currentDisplay: newItem });
+  },
+  
+  removeFromApproved: (id) => set((s) => ({
+    approvedQueue: s.approvedQueue.filter((i) => i.id !== id),
+  })),
+  
+  updateSettings: (newSettings) => set((s) => ({ 
+    settings: { ...s.settings, ...newSettings } 
+  })),
 }));

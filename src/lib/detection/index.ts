@@ -1,10 +1,12 @@
 // ============================================
-// Scripture Detection Engine (Client-safe)
+// Scripture Detection Engine (v1.1)
+// With phrase matching and confidence levels
 // ============================================
 
 import { DetectionResult, ScriptureReference } from '@/types';
 import { parseScriptures, mightContainScripture } from './parser';
 import { containsTriggerKeywords } from './books';
+import { findPhraseMatches } from './phrases';
 
 const recentDetections = new Map<string, number>();
 const COOLDOWN_MS = 60000;
@@ -82,20 +84,15 @@ export async function detectScriptures(
   } = {}
 ): Promise<DetectionResult[]> {
   const results: DetectionResult[] = [];
+  const foundRefs = new Set<string>();
   
-  const mightHaveScripture = mightContainScripture(transcript);
-  const hasTriggerKeywords = containsTriggerKeywords(transcript);
-  
-  if (!mightHaveScripture && !hasTriggerKeywords) {
-    return results;
-  }
-  
-  // Stage 1: Deterministic parsing (client-side)
-  if (mightHaveScripture) {
+  // Stage 1: Deterministic parsing (explicit refs like "John 3:16")
+  if (mightContainScripture(transcript)) {
     const parsed = parseScriptures(transcript);
     
     for (const { reference, matchedText } of parsed) {
       if (isOnCooldown(reference.reference)) continue;
+      if (foundRefs.has(reference.reference)) continue;
       
       let verseText: string | undefined;
       let translation: string | undefined;
@@ -118,16 +115,61 @@ export async function detectScriptures(
         translation,
       });
       
+      foundRefs.add(reference.reference);
       recordDetection(reference.reference);
     }
   }
   
-  // Stage 2: LLM detection via API (server-side)
-  if (results.length === 0 && hasTriggerKeywords && !options.skipLLM) {
+  // Stage 2: Phrase matching (verbatim quotes like "for God so loved the world")
+  const phraseMatches = findPhraseMatches(transcript);
+  
+  for (const match of phraseMatches) {
+    if (isOnCooldown(match.reference)) continue;
+    if (foundRefs.has(match.reference)) continue;
+    
+    const reference: ScriptureReference = {
+      book: match.book,
+      chapter: match.chapter,
+      verseStart: match.verseStart,
+      verseEnd: match.verseEnd,
+      reference: match.reference,
+    };
+    
+    let verseText: string | undefined;
+    let translation: string | undefined;
+    
+    if (options.fetchVerses) {
+      const verse = await fetchVerseText(reference);
+      verseText = verse.text;
+      translation = verse.translation;
+    }
+    
+    results.push({
+      id: generateId(),
+      reference,
+      matchedText: match.phrase,
+      confidence: 'high',
+      confidenceScore: 0.90,
+      detectionType: 'phrase',
+      detectedAt: new Date(),
+      verseText,
+      translation,
+    });
+    
+    foundRefs.add(match.reference);
+    recordDetection(match.reference);
+  }
+  
+  // Stage 3: LLM detection (implicit refs - only if no explicit found + triggers present + long enough)
+  const hasTriggerKeywords = containsTriggerKeywords(transcript);
+  const wordCount = transcript.split(/\s+/).length;
+  
+  if (results.length === 0 && hasTriggerKeywords && wordCount > 10 && !options.skipLLM) {
     const llmResults = await detectWithLLMApi(transcript, options.context);
     
     for (const { reference, confidence, reasoning } of llmResults) {
       if (isOnCooldown(reference.reference)) continue;
+      if (foundRefs.has(reference.reference)) continue;
       
       let verseText: string | undefined;
       let translation: string | undefined;
@@ -151,6 +193,7 @@ export async function detectScriptures(
         translation,
       });
       
+      foundRefs.add(reference.reference);
       recordDetection(reference.reference);
     }
   }
@@ -165,3 +208,4 @@ export function clearCooldowns(): void {
 export * from './books';
 export * from './normalizer';
 export * from './parser';
+export * from './phrases';

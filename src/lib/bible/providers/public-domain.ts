@@ -56,7 +56,7 @@ export async function fetchPublicDomainVerse(
       book: reference.book,
       chapter: reference.chapter,
       verseStart: reference.verseStart || 1,
-      verseEnd: reference.verseEnd || undefined,
+      verseEnd: reference.verseEnd || null,
       cachedAt: new Date(),
     };
   } catch (error) {
@@ -198,7 +198,7 @@ export function getEmbeddedVerse(reference: ScriptureReference): BibleVerse | nu
     book: reference.book,
     chapter: reference.chapter,
     verseStart: reference.verseStart || 1,
-    verseEnd: reference.verseEnd || undefined,
+    verseEnd: reference.verseEnd || null,
     cachedAt: new Date(),
   };
 }

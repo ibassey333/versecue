@@ -1,260 +1,160 @@
 // ============================================
-// Session State Store (Zustand)
-// Manages all application state
+// Session Store (v1.1)
 // ============================================
 
 import { create } from 'zustand';
-import { DetectionResult, QueueItem, TranscriptSegment, AppSettings } from '@/types';
+import { DetectionResult, QueueItem, TranscriptSegment, SessionSettings } from '@/types';
+import { broadcastDisplay, broadcastClear } from '@/lib/broadcast';
 
 interface SessionState {
-  // Session info
-  sessionId: string;
+  sessionId: string | null;
   startedAt: Date | null;
   isListening: boolean;
-  isPaused: boolean; // Preaching mode off
-  
-  // Transcript
-  transcript: TranscriptSegment[];
-  interimTranscript: string;
-  
-  // Detection queues
-  pendingQueue: QueueItem[];
-  approvedQueue: QueueItem[];
-  
-  // Currently displayed
-  currentDisplay: QueueItem | null;
-  displayHistory: QueueItem[];
-  
-  // Stats
-  stats: {
-    detected: number;
-    approved: number;
-    displayed: number;
-    dismissed: number;
-  };
-  
-  // Settings
-  settings: AppSettings;
-  
-  // Audio
+  isPaused: boolean;
   selectedAudioDevice: string | null;
   audioLevel: number;
+  transcript: TranscriptSegment[];
+  interimTranscript: string;
+  pendingQueue: QueueItem[];
+  approvedQueue: QueueItem[];
+  currentDisplay: QueueItem | null;
+  detectionHistory: QueueItem[];
+  displayHistory: QueueItem[];
+  stats: { detected: number; approved: number; displayed: number; dismissed: number };
+  settings: SessionSettings;
   
-  // Actions
   startSession: () => void;
   endSession: () => void;
   toggleListening: () => void;
   togglePause: () => void;
-  
-  // Transcript actions
+  setAudioDevice: (deviceId: string) => void;
+  setAudioLevel: (level: number) => void;
   addTranscriptSegment: (segment: TranscriptSegment) => void;
   setInterimTranscript: (text: string) => void;
-  clearTranscript: () => void;
-  
-  // Detection actions
   addDetection: (detection: DetectionResult) => void;
   approveDetection: (id: string) => void;
   dismissDetection: (id: string) => void;
-  
-  // Display actions
   displayScripture: (id: string) => void;
   clearDisplay: () => void;
-  
-  // Audio actions
-  setAudioDevice: (deviceId: string) => void;
-  setAudioLevel: (level: number) => void;
-  
-  // Settings actions
-  updateSettings: (settings: Partial<AppSettings>) => void;
-  
-  // Export
-  getExportData: () => {
-    sessionId: string;
-    startedAt: Date | null;
-    endedAt: Date;
-    transcript: TranscriptSegment[];
-    scriptures: QueueItem[];
-    stats: SessionState['stats'];
-  };
+  updateSettings: (settings: Partial<SessionSettings>) => void;
+  getExportData: () => unknown;
 }
 
-const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const AUTO_APPROVE_THRESHOLD = 0.85;
 
 export const useSessionStore = create<SessionState>((set, get) => ({
-  // Initial state
-  sessionId: generateSessionId(),
+  sessionId: null,
   startedAt: null,
   isListening: false,
   isPaused: false,
-  
-  transcript: [],
-  interimTranscript: '',
-  
-  pendingQueue: [],
-  approvedQueue: [],
-  
-  currentDisplay: null,
-  displayHistory: [],
-  
-  stats: {
-    detected: 0,
-    approved: 0,
-    displayed: 0,
-    dismissed: 0,
-  },
-  
-  settings: {
-    defaultTranslation: 'KJV',
-    autoApproveHighConfidence: false,
-    showTranscript: true,
-    displayTheme: 'dark',
-    keyboardShortcutsEnabled: true,
-  },
-  
   selectedAudioDevice: null,
   audioLevel: 0,
+  transcript: [],
+  interimTranscript: '',
+  pendingQueue: [],
+  approvedQueue: [],
+  currentDisplay: null,
+  detectionHistory: [],
+  displayHistory: [],
+  stats: { detected: 0, approved: 0, displayed: 0, dismissed: 0 },
+  settings: {
+    translation: 'KJV',
+    autoApproveHighConfidence: true,
+    keyboardShortcutsEnabled: true,
+    theme: 'dark',
+  },
   
-  // Session actions
   startSession: () => set({
-    sessionId: generateSessionId(),
+    sessionId: `session_${Date.now()}`,
     startedAt: new Date(),
-    isListening: true,
-    isPaused: false,
     transcript: [],
-    interimTranscript: '',
     pendingQueue: [],
     approvedQueue: [],
-    currentDisplay: null,
+    detectionHistory: [],
     displayHistory: [],
+    currentDisplay: null,
     stats: { detected: 0, approved: 0, displayed: 0, dismissed: 0 },
   }),
   
-  endSession: () => set({
-    isListening: false,
-    isPaused: false,
-  }),
+  endSession: () => set({ isListening: false, isPaused: false }),
   
-  toggleListening: () => set((state) => ({
-    isListening: !state.isListening,
-    startedAt: !state.isListening && !state.startedAt ? new Date() : state.startedAt,
-  })),
+  toggleListening: () => {
+    const { isListening } = get();
+    if (!isListening) get().startSession();
+    set({ isListening: !isListening });
+  },
   
-  togglePause: () => set((state) => ({
-    isPaused: !state.isPaused,
-  })),
-  
-  // Transcript actions
-  addTranscriptSegment: (segment) => set((state) => ({
-    transcript: [...state.transcript, segment],
-    interimTranscript: '',
-  })),
-  
+  togglePause: () => set((state) => ({ isPaused: !state.isPaused })),
+  setAudioDevice: (deviceId) => set({ selectedAudioDevice: deviceId }),
+  setAudioLevel: (level) => set({ audioLevel: level }),
+  addTranscriptSegment: (segment) => set((state) => ({ transcript: [...state.transcript, segment], interimTranscript: '' })),
   setInterimTranscript: (text) => set({ interimTranscript: text }),
   
-  clearTranscript: () => set({ transcript: [], interimTranscript: '' }),
-  
-  // Detection actions
-  addDetection: (detection) => set((state) => {
-    // Check for duplicates
-    const exists = state.pendingQueue.some(
-      q => q.reference.reference === detection.reference.reference
-    ) || state.approvedQueue.some(
-      q => q.reference.reference === detection.reference.reference
-    );
-    
-    if (exists) return state;
-    
-    const queueItem: QueueItem = {
-      ...detection,
-      status: 'pending',
+  addDetection: (detection) => {
+    const { settings } = get();
+    const item: QueueItem = {
+      id: detection.id,
+      reference: detection.reference,
+      verseText: detection.verseText,
+      translation: detection.translation,
+      confidence: detection.confidence,
+      confidenceScore: detection.confidenceScore,
+      detectionType: detection.detectionType,
+      detectedAt: detection.detectedAt,
     };
     
-    // Auto-approve high confidence if enabled
-    if (state.settings.autoApproveHighConfidence && detection.confidence === 'high') {
-      return {
-        approvedQueue: [...state.approvedQueue, { ...queueItem, status: 'approved', approvedAt: new Date() }],
-        stats: {
-          ...state.stats,
-          detected: state.stats.detected + 1,
-          approved: state.stats.approved + 1,
-        },
-      };
-    }
+    const shouldAutoApprove = settings.autoApproveHighConfidence && detection.confidenceScore >= AUTO_APPROVE_THRESHOLD;
     
-    return {
-      pendingQueue: [...state.pendingQueue, queueItem],
-      stats: { ...state.stats, detected: state.stats.detected + 1 },
-    };
-  }),
+    set((state) => {
+      if (shouldAutoApprove) {
+        return {
+          detectionHistory: [...state.detectionHistory, item],
+          approvedQueue: [...state.approvedQueue, item],
+          stats: { ...state.stats, detected: state.stats.detected + 1, approved: state.stats.approved + 1 },
+        };
+      } else {
+        return {
+          detectionHistory: [...state.detectionHistory, item],
+          pendingQueue: [...state.pendingQueue, item],
+          stats: { ...state.stats, detected: state.stats.detected + 1 },
+        };
+      }
+    });
+  },
   
   approveDetection: (id) => set((state) => {
-    const item = state.pendingQueue.find(q => q.id === id);
+    const item = state.pendingQueue.find((i) => i.id === id);
     if (!item) return state;
-    
     return {
-      pendingQueue: state.pendingQueue.filter(q => q.id !== id),
-      approvedQueue: [
-        ...state.approvedQueue,
-        { ...item, status: 'approved', approvedAt: new Date() },
-      ],
+      pendingQueue: state.pendingQueue.filter((i) => i.id !== id),
+      approvedQueue: [...state.approvedQueue, item],
       stats: { ...state.stats, approved: state.stats.approved + 1 },
     };
   }),
   
   dismissDetection: (id) => set((state) => ({
-    pendingQueue: state.pendingQueue.filter(q => q.id !== id),
+    pendingQueue: state.pendingQueue.filter((i) => i.id !== id),
     stats: { ...state.stats, dismissed: state.stats.dismissed + 1 },
   })),
   
-  // Display actions
-  displayScripture: (id) => set((state) => {
-    const item = state.approvedQueue.find(q => q.id === id);
-    if (!item) return state;
-    
-    const displayedItem: QueueItem = {
-      ...item,
-      displayedAt: new Date(),
-    };
-    
-    return {
-      currentDisplay: displayedItem,
-      displayHistory: [...state.displayHistory, displayedItem],
-      approvedQueue: state.approvedQueue.filter(q => q.id !== id),
+  displayScripture: (id) => {
+    const state = get();
+    const item = state.approvedQueue.find((i) => i.id === id);
+    if (!item) return;
+    const displayItem = { ...item, displayedAt: new Date() };
+    broadcastDisplay(displayItem);
+    set((state) => ({
+      approvedQueue: state.approvedQueue.filter((i) => i.id !== id),
+      currentDisplay: displayItem,
+      displayHistory: [...state.displayHistory, displayItem],
       stats: { ...state.stats, displayed: state.stats.displayed + 1 },
-    };
-  }),
+    }));
+  },
   
-  clearDisplay: () => set({ currentDisplay: null }),
-  
-  // Audio actions
-  setAudioDevice: (deviceId) => set({ selectedAudioDevice: deviceId }),
-  setAudioLevel: (level) => set({ audioLevel: level }),
-  
-  // Settings actions
-  updateSettings: (newSettings) => set((state) => ({
-    settings: { ...state.settings, ...newSettings },
-  })),
-  
-  // Export
+  clearDisplay: () => { broadcastClear(); set({ currentDisplay: null }); },
+  updateSettings: (newSettings) => set((state) => ({ settings: { ...state.settings, ...newSettings } })),
   getExportData: () => {
     const state = get();
-    return {
-      sessionId: state.sessionId,
-      startedAt: state.startedAt,
-      endedAt: new Date(),
-      transcript: state.transcript,
-      scriptures: state.displayHistory,
-      stats: state.stats,
-    };
+    return { sessionId: state.sessionId, startedAt: state.startedAt, endedAt: new Date(), transcript: state.transcript, scriptures: state.displayHistory, stats: state.stats };
   },
 }));
-
-// Selector hooks for optimized re-renders
-export const useIsListening = () => useSessionStore((state) => state.isListening);
-export const useIsPaused = () => useSessionStore((state) => state.isPaused);
-export const usePendingQueue = () => useSessionStore((state) => state.pendingQueue);
-export const useApprovedQueue = () => useSessionStore((state) => state.approvedQueue);
-export const useCurrentDisplay = () => useSessionStore((state) => state.currentDisplay);
-export const useStats = () => useSessionStore((state) => state.stats);
-export const useTranscript = () => useSessionStore((state) => state.transcript);
-export const useInterimTranscript = () => useSessionStore((state) => state.interimTranscript);

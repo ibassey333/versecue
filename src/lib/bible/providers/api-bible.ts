@@ -134,7 +134,7 @@ export async function fetchApiBibleVerse(
       book: reference.book,
       chapter: reference.chapter,
       verseStart: reference.verseStart || 1,
-      verseEnd: reference.verseEnd || undefined,
+      verseEnd: reference.verseEnd || null,
       cachedAt: new Date(),
     };
   } catch (error) {

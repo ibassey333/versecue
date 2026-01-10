@@ -1,0 +1,6 @@
+{
+  "/api/verses/route": "app/api/verses/route.js",
+  "/display/page": "app/display/page.js",
+  "/api/detect-llm/route": "app/api/detect-llm/route.js",
+  "/page": "app/page.js"
+}

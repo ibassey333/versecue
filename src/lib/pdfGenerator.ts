@@ -36,12 +36,21 @@ function generatePrintHTML(session: SessionData): string {
     minute: '2-digit',
   });
   
-  const scripturesHTML = session.scriptures.map(s => `
+  // Dedupe scriptures and truncate long verses
+  const uniqueScriptures = session.scriptures.filter((s, i, arr) => 
+    arr.findIndex(x => x.reference === s.reference) === i
+  ).slice(0, 10); // Max 10 scriptures
+  
+  const scripturesHTML = uniqueScriptures.map(s => {
+    const truncatedText = s.verse_text.length > 250 
+      ? s.verse_text.substring(0, 250) + '...' 
+      : s.verse_text;
+    return `
     <div class="scripture-card">
       <div class="scripture-ref">${s.reference}</div>
-      <div class="scripture-text">"${s.verse_text}"</div>
+      <div class="scripture-text">"${truncatedText}"</div>
     </div>
-  `).join('');
+  `}).join('');
   
   const keyPointsHTML = session.key_points.map((point, i) => `
     <div class="key-point">

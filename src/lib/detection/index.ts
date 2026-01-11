@@ -1,15 +1,16 @@
 // ============================================
-// Detection Engine v2.3 - Reduced cooldown
+// Detection Engine v3.0 - With Groq AI
 // ============================================
 
 import { ScriptureReference, DetectionResult } from '@/types';
 import { parseScriptures } from './parser';
 import { findPhraseMatches, PHRASE_COUNT } from './phrases';
+import { detectWithGroq } from './groq';
 import { fetchVerse } from '@/lib/bible';
 
-// Track recent detections - shorter cooldown
+// Track recent detections
 const recentDetections = new Map<string, number>();
-const COOLDOWN_MS = 10000; // 10 seconds (was 30)
+const COOLDOWN_MS = 10000; // 10 seconds
 
 function isDuplicate(ref: string): boolean {
   const lastSeen = recentDetections.get(ref);
@@ -25,12 +26,16 @@ function isDuplicate(ref: string): boolean {
 
 /**
  * Detect scripture references in text
+ * 3-stage pipeline:
+ * 1. Parser (deterministic) - "John 3:16" → 95% confidence
+ * 2. Phrases (quoted text) - "for God so loved" → 88% confidence  
+ * 3. Groq AI (implicit) - "prodigal son" → variable confidence
  */
 export async function detectScriptures(text: string): Promise<DetectionResult[]> {
   const results: DetectionResult[] = [];
   const translation = 'KJV';
   
-  console.log('[VerseCue Detection] Processing:', text.substring(0, 80));
+  console.log('[VerseCue Detection] Processing:', text.substring(0, 60));
   
   // Stage 1: Parser (deterministic)
   const parsed = parseScriptures(text);
@@ -38,7 +43,6 @@ export async function detectScriptures(text: string): Promise<DetectionResult[]>
   
   for (const result of parsed) {
     const ref = result.reference;
-    
     if (isDuplicate(ref.reference)) continue;
     
     const verse = await fetchVerse(ref, translation);
@@ -87,9 +91,46 @@ export async function detectScriptures(text: string): Promise<DetectionResult[]>
     });
   }
   
-  console.log('[VerseCue Detection] Total:', results.length);
+  // Stage 3: Groq AI (implicit references) - only if enabled and we haven't found much
+  const groqEnabled = process.env.NEXT_PUBLIC_GROQ_API_KEY && process.env.NEXT_PUBLIC_ENABLE_LLM_DETECTION === 'true';
+  
+  if (groqEnabled && results.length < 2 && text.length > 30) {
+    console.log('[VerseCue Detection] Running Groq AI detection...');
+    
+    try {
+      const groqResults = await detectWithGroq(text);
+      
+      for (const groq of groqResults) {
+        if (isDuplicate(groq.reference.reference)) continue;
+        if (results.some(r => r.reference.reference === groq.reference.reference)) continue;
+        
+        const verse = await fetchVerse(groq.reference, translation);
+        
+        const confidence = groq.confidence >= 0.85 ? 'high' : groq.confidence >= 0.7 ? 'medium' : 'low';
+        
+        results.push({
+          id: `ai_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          reference: groq.reference,
+          matchedText: groq.matchedText,
+          confidence,
+          confidenceScore: groq.confidence,
+          detectionType: 'llm',
+          detectedAt: new Date(),
+          verseText: verse?.text || '',
+          translation: verse?.translation || translation,
+        });
+        
+        console.log('[VerseCue Detection] Groq found:', groq.reference.reference, '(' + groq.matchedText + ')');
+      }
+    } catch (err) {
+      console.error('[VerseCue Detection] Groq error:', err);
+    }
+  }
+  
+  console.log('[VerseCue Detection] Total results:', results.length);
   return results;
 }
 
 export { parseScriptures } from './parser';
 export { findPhraseMatches, PHRASE_COUNT } from './phrases';
+export { detectWithGroq } from './groq';

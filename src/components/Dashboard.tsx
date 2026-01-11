@@ -826,15 +826,15 @@ export default function Dashboard() {
         {/* New Layout: 3 columns */}
         <div className="grid grid-cols-12 gap-6">
           {/* Left Column: Transcript + Search + Needs Review */}
-          <div className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="col-span-12 lg:col-span-4 space-y-4">
             <TranscriptPanel speechProvider={activeSpeechProvider} className="h-[400px]" />
             <ManualSearch onSearch={handleManualSearch} />
             <NeedsReview />
           </div>
           
           {/* Middle Column: Ready to Display (full height) */}
-          <div className="col-span-12 lg:col-span-5">
-            <ReadyToDisplay className="h-full min-h-[600px]" />
+          <div className="col-span-12 lg:col-span-4">
+            <ReadyToDisplay className="h-full max-h-[calc(100vh-250px)] overflow-y-auto" />
           </div>
           
           {/* Right Column: Display + Translation + Stats + Log */}

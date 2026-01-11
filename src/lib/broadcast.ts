@@ -1,3 +1,7 @@
+// ============================================
+// BroadcastChannel + localStorage for Display Sync
+// ============================================
+
 import { QueueItem } from '@/types';
 
 const CHANNEL_NAME = 'versecue-display';
@@ -19,21 +23,27 @@ export function broadcastDisplay(scripture: QueueItem): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(scripture));
     getChannel()?.postMessage({ type: 'DISPLAY', scripture });
-  } catch (e) {}
+  } catch (e) {
+    console.error('Broadcast failed:', e);
+  }
 }
 
 export function broadcastClear(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
     getChannel()?.postMessage({ type: 'CLEAR' });
-  } catch (e) {}
+  } catch (e) {
+    console.error('Broadcast clear failed:', e);
+  }
 }
 
 export function getCurrentDisplay(): QueueItem | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? JSON.parse(stored) : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export function onDisplayMessage(callback: (msg: DisplayMessage) => void): () => void {

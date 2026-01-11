@@ -1,5 +1,5 @@
 // ============================================
-// VerseCue Type Definitions
+// VerseCue Type Definitions v2.0
 // ============================================
 
 export interface ScriptureReference {
@@ -16,7 +16,7 @@ export interface DetectionResult {
   matchedText: string;
   confidence: 'high' | 'medium' | 'low';
   confidenceScore: number;
-  detectionType: 'deterministic' | 'llm' | 'phrase';
+  detectionType: 'deterministic' | 'phrase' | 'llm';
   reasoning?: string;
   detectedAt: Date;
   verseText?: string;
@@ -30,7 +30,7 @@ export interface QueueItem {
   translation?: string;
   confidence: 'high' | 'medium' | 'low';
   confidenceScore: number;
-  detectionType: 'deterministic' | 'llm' | 'phrase';
+  detectionType: 'deterministic' | 'phrase' | 'llm';
   detectedAt: Date;
   displayedAt?: Date;
 }
@@ -41,6 +41,12 @@ export interface TranscriptSegment {
   timestamp: Date;
   isFinal: boolean;
   confidence?: number;
+}
+
+export interface AudioDevice {
+  deviceId: string;
+  label: string;
+  kind: 'audioinput';
 }
 
 export interface BibleVerse {
@@ -55,17 +61,29 @@ export interface BibleVerse {
   cachedAt?: Date;
 }
 
+export interface Translation {
+  id: string;
+  name: string;
+  abbreviation: string;
+  source: 'local' | 'api-bible' | 'bible-api';
+  enabled: boolean;
+  apiId?: string; // API.Bible ID
+}
+
+export interface SessionSettings {
+  translation: string;
+  autoApproveHighConfidence: boolean;
+  keyboardShortcutsEnabled: boolean;
+  theme: 'dark' | 'light';
+  quickTranslations: string[]; // User's preferred quick buttons
+  speechProvider: 'browser' | 'deepgram';
+  deepgramApiKey?: string;
+  enableLLMDetection: boolean;
+}
+
 export interface BookMetadata {
   name: string;
   aliases: string[];
   chapters: number;
-  versesPerChapter?: number[];
   testament: 'old' | 'new';
-}
-
-
-export interface AudioDevice {
-  deviceId: string;
-  label: string;
-  kind: 'audioinput';
 }

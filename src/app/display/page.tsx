@@ -28,36 +28,36 @@ export default function DisplayPage() {
   }, []);
   
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-8">
-      <div className="fixed inset-0 bg-gradient-radial from-[#111820] to-[#0a0a0a]" />
+    <div className="min-h-screen bg-verse-bg flex items-center justify-center p-8">
+      <div className="fixed inset-0 bg-gradient-to-br from-verse-bg via-verse-surface to-verse-bg" />
       
       {scripture ? (
-        <div className="relative z-10 text-center max-w-5xl mx-auto">
+        <div className="relative z-10 text-center max-w-5xl mx-auto animate-fade-in">
           <h1 
-            className="font-serif text-6xl md:text-7xl lg:text-8xl font-bold text-amber-400 mb-8"
-            style={{ textShadow: '0 0 60px rgba(251, 191, 36, 0.3)' }}
+            className="font-display text-6xl md:text-7xl lg:text-8xl font-bold text-gold-400 mb-8"
+            style={{ textShadow: '0 0 60px rgba(212, 175, 55, 0.3)' }}
           >
             {scripture.reference.reference}
           </h1>
           
-          <div className="w-32 h-0.5 mx-auto mb-8 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
+          <div className="w-32 h-0.5 mx-auto mb-8 bg-gradient-to-r from-transparent via-gold-500/50 to-transparent" />
           
           {scripture.verseText && (
-            <p className="font-serif text-2xl md:text-3xl lg:text-4xl text-gray-100 leading-relaxed italic px-8">
+            <p className="font-scripture text-2xl md:text-3xl lg:text-4xl text-verse-text leading-relaxed italic px-8">
               "{scripture.verseText}"
             </p>
           )}
           
           {scripture.translation && (
-            <p className="mt-8 text-lg text-gray-500 uppercase tracking-widest">
+            <p className="mt-8 text-lg text-verse-muted uppercase tracking-widest">
               — {scripture.translation} —
             </p>
           )}
         </div>
       ) : (
         <div className="relative z-10 text-center">
-          <div className="text-gray-700 font-serif text-5xl tracking-tight">VerseCue</div>
-          <p className="text-gray-800 text-sm mt-4">Waiting for scripture...</p>
+          <div className="text-verse-muted font-display text-5xl tracking-tight opacity-30">VerseCue</div>
+          <p className="text-verse-subtle text-sm mt-4">Waiting for scripture...</p>
         </div>
       )}
     </div>

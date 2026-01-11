@@ -1,5 +1,5 @@
 // ============================================
-// Audio Capture Hook - with debug logging
+// Audio Capture Hook v2.0 - FIXED
 // ============================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -23,13 +23,22 @@ export function useAudioCapture(options: AudioCaptureOptions) {
   const [isSupported, setIsSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const { isListening, isPaused, selectedAudioDevice, setAudioDevice } = useSessionStore();
+  const isListening = useSessionStore((s) => s.isListening);
+  const isPaused = useSessionStore((s) => s.isPaused);
+  const selectedAudioDevice = useSessionStore((s) => s.selectedAudioDevice);
+  const setAudioDevice = useSessionStore((s) => s.setAudioDevice);
   
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recognitionRef = useRef<any>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const isPausedRef = useRef(isPaused);
+  
+  // Keep isPausedRef in sync
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
   
   // Get available audio devices
   useEffect(() => {
@@ -52,25 +61,25 @@ export function useAudioCapture(options: AudioCaptureOptions) {
           setAudioDevice(audioInputs[0].deviceId);
         }
       } catch (err) {
-        console.error('Failed to get audio devices:', err);
+        console.error('[VerseCue] Failed to get audio devices:', err);
         setError('Microphone access denied');
       }
     }
     
     getDevices();
-  }, [selectedAudioDevice, setAudioDevice]);
+  }, []);
   
-  // Check for Web Speech API support
+  // Check for Speech API support
   useEffect(() => {
     const SpeechAPI = getSpeechRecognition();
     console.log('[VerseCue] Speech API available:', !!SpeechAPI);
     if (!SpeechAPI) {
       setIsSupported(false);
-      setError('Speech recognition not supported. Use Chrome.');
+      setError('Speech recognition not supported. Use Chrome or Edge.');
     }
   }, []);
   
-  // Update audio level
+  // Update audio level meter
   const updateAudioLevel = useCallback(() => {
     if (!analyserRef.current) return;
     
@@ -82,34 +91,39 @@ export function useAudioCapture(options: AudioCaptureOptions) {
     
     options.onLevelChange(normalized);
     
-    if (isListening) {
-      animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
-    }
-  }, [isListening, options]);
+    animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+  }, [options.onLevelChange]);
   
-  // Start/stop
+  // Main capture effect - FIXED: removed isPaused from dependencies
   useEffect(() => {
-    // Cleanup function
     const cleanup = () => {
-      console.log('[VerseCue] Cleaning up...');
+      console.log('[VerseCue] Cleaning up audio capture...');
+      
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
         } catch (e) { /* ignore */ }
         recognitionRef.current = null;
       }
+      
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
         mediaStreamRef.current = null;
       }
+      
       if (audioContextRef.current) {
-        audioContextRef.current.close();
+        try {
+          audioContextRef.current.close();
+        } catch (e) { /* ignore */ }
         audioContextRef.current = null;
       }
+      
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
+      
+      options.onLevelChange(0);
     };
     
     if (!isListening || !selectedAudioDevice) {
@@ -117,18 +131,29 @@ export function useAudioCapture(options: AudioCaptureOptions) {
       return;
     }
     
-    console.log('[VerseCue] Starting capture...');
+    console.log('[VerseCue] Starting audio capture...');
+    let isActive = true;
     
     async function startCapture() {
       try {
-        // Audio stream for level meter
+        // Get audio stream for level meter
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined },
+          audio: { 
+            deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
         });
-        mediaStreamRef.current = stream;
-        console.log('[VerseCue] Got audio stream');
         
-        // Audio context for level meter
+        if (!isActive) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        
+        mediaStreamRef.current = stream;
+        console.log('[VerseCue] Audio stream acquired');
+        
+        // Set up audio context for level meter
         audioContextRef.current = new AudioContext();
         const source = audioContextRef.current.createMediaStreamSource(stream);
         analyserRef.current = audioContextRef.current.createAnalyser();
@@ -136,10 +161,11 @@ export function useAudioCapture(options: AudioCaptureOptions) {
         source.connect(analyserRef.current);
         updateAudioLevel();
         
-        // Speech recognition
+        // Set up speech recognition (Browser API)
         const SpeechRecognitionAPI = getSpeechRecognition();
         if (!SpeechRecognitionAPI) {
-          console.error('[VerseCue] No Speech API!');
+          console.error('[VerseCue] No Speech API available');
+          setError('Speech recognition not available');
           return;
         }
         
@@ -150,25 +176,21 @@ export function useAudioCapture(options: AudioCaptureOptions) {
         recognition.maxAlternatives = 1;
         
         recognition.onstart = () => {
-          console.log('[VerseCue] ✅ Recognition STARTED');
+          console.log('[VerseCue] ✅ Speech recognition started');
+          setError(null);
         };
         
         recognition.onaudiostart = () => {
-          console.log('[VerseCue] Audio started');
-        };
-        
-        recognition.onsoundstart = () => {
-          console.log('[VerseCue] Sound detected');
+          console.log('[VerseCue] Audio input started');
         };
         
         recognition.onspeechstart = () => {
-          console.log('[VerseCue] Speech detected!');
+          console.log('[VerseCue] Speech detected');
         };
         
         recognition.onresult = (event: any) => {
-          console.log('[VerseCue] Got result!', event.results.length);
-          
-          if (isPaused) return;
+          // Use ref to check paused state (avoids stale closure)
+          if (isPausedRef.current) return;
           
           let interimText = '';
           
@@ -176,11 +198,11 @@ export function useAudioCapture(options: AudioCaptureOptions) {
             const result = event.results[i];
             const transcript = result[0].transcript;
             
-            console.log('[VerseCue] Transcript:', transcript, 'Final:', result.isFinal);
+            console.log('[VerseCue] Transcript:', transcript.substring(0, 50), '| Final:', result.isFinal);
             
             if (result.isFinal) {
               const segment: TranscriptSegment = {
-                id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: `seg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
                 text: transcript,
                 timestamp: new Date(),
                 isFinal: true,
@@ -199,25 +221,27 @@ export function useAudioCapture(options: AudioCaptureOptions) {
         };
         
         recognition.onerror = (event: any) => {
-          console.error('[VerseCue] Error:', event.error);
-          // Only report non-routine errors
+          console.error('[VerseCue] Speech error:', event.error);
           if (event.error !== 'aborted' && event.error !== 'no-speech') {
+            setError(`Speech error: ${event.error}`);
             options.onError(new Error(event.error));
           }
         };
         
         recognition.onend = () => {
-          console.log('[VerseCue] Recognition ended');
-          // Restart if still listening
-          if (isListening && recognitionRef.current) {
-            console.log('[VerseCue] Restarting...');
+          console.log('[VerseCue] Speech recognition ended');
+          // Auto-restart if still listening and component is still active
+          if (isActive && recognitionRef.current) {
+            console.log('[VerseCue] Restarting recognition in 1s...');
             setTimeout(() => {
-              try {
-                recognitionRef.current?.start();
-              } catch (e) {
-                console.log('[VerseCue] Restart failed:', e);
+              if (isActive && recognitionRef.current) {
+                try {
+                  recognitionRef.current.start();
+                } catch (e) {
+                  console.log('[VerseCue] Restart failed:', e);
+                }
               }
-            }, 500);
+            }, 1000); // Increased delay to prevent tight loop
           }
         };
         
@@ -225,14 +249,14 @@ export function useAudioCapture(options: AudioCaptureOptions) {
         
         try {
           recognition.start();
-          console.log('[VerseCue] Called start()');
+          console.log('[VerseCue] Recognition.start() called');
         } catch (e) {
-          console.error('[VerseCue] Start failed:', e);
+          console.error('[VerseCue] Failed to start recognition:', e);
+          setError('Failed to start speech recognition');
         }
         
-        setError(null);
       } catch (err) {
-        console.error('[VerseCue] Capture failed:', err);
+        console.error('[VerseCue] Audio capture failed:', err);
         setError('Failed to access microphone');
         options.onError(err as Error);
       }
@@ -240,8 +264,11 @@ export function useAudioCapture(options: AudioCaptureOptions) {
     
     startCapture();
     
-    return cleanup;
-  }, [isListening, selectedAudioDevice]); // Removed isPaused and options to prevent re-runs
+    return () => {
+      isActive = false;
+      cleanup();
+    };
+  }, [isListening, selectedAudioDevice]); // FIXED: Removed isPaused, options, updateAudioLevel
   
   return {
     devices,

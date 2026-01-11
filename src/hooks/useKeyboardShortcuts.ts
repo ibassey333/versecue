@@ -1,6 +1,6 @@
 // ============================================
-// Keyboard Shortcuts Hook
-// Handles all keyboard interactions
+// Keyboard Shortcuts Hook v2.0
+// Added: Arrow keys for verse navigation
 // ============================================
 
 import { useEffect, useCallback } from 'react';
@@ -14,11 +14,13 @@ interface ShortcutConfig {
   onClearDisplay?: () => void;
   onTogglePause?: () => void;
   onSearch?: () => void;
+  onNextVerse?: () => void;
+  onPrevVerse?: () => void;
 }
 
 export function useKeyboardShortcuts(config: ShortcutConfig) {
   const {
-    detectionQueue,
+    pendingQueue,
     approvedQueue,
     currentDisplay,
     approveDetection,
@@ -26,6 +28,8 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
     displayScripture,
     clearDisplay,
     togglePause,
+    goToNextVerse,
+    goToPrevVerse,
   } = useSessionStore();
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -34,7 +38,8 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
     // Don't capture if user is typing in an input
     if (
       event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement
+      event.target instanceof HTMLTextAreaElement ||
+      event.target instanceof HTMLSelectElement
     ) {
       return;
     }
@@ -42,13 +47,10 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
     switch (event.key) {
       case 'Enter':
         event.preventDefault();
-        // If there's something in pending, approve it
-        if (detectionQueue.length > 0) {
-          approveDetection(detectionQueue[0].id);
+        if (pendingQueue.length > 0) {
+          approveDetection(pendingQueue[0].id);
           config.onApprove?.();
-        }
-        // Else if there's something approved, display it
-        else if (approvedQueue.length > 0) {
+        } else if (approvedQueue.length > 0) {
           displayScripture(approvedQueue[0].id);
           config.onDisplay?.();
         }
@@ -56,37 +58,40 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
         
       case 'Escape':
         event.preventDefault();
-        // If something is displayed, clear it
         if (currentDisplay) {
           clearDisplay();
           config.onClearDisplay?.();
-        }
-        // Else if there's something pending, dismiss it
-        else if (detectionQueue.length > 0) {
-          dismissDetection(detectionQueue[0].id);
+        } else if (pendingQueue.length > 0) {
+          dismissDetection(pendingQueue[0].id);
           config.onDismiss?.();
         }
         break;
         
       case ' ':
-        // Space to toggle pause (unless in input)
         event.preventDefault();
         togglePause();
         config.onTogglePause?.();
         break;
         
       case '/':
-        // Forward slash to focus search
         event.preventDefault();
         config.onSearch?.();
         break;
         
-      case 'ArrowUp':
-        // Navigate up in queue (future enhancement)
+      case 'ArrowRight':
+        if (currentDisplay) {
+          event.preventDefault();
+          goToNextVerse();
+          config.onNextVerse?.();
+        }
         break;
         
-      case 'ArrowDown':
-        // Navigate down in queue (future enhancement)
+      case 'ArrowLeft':
+        if (currentDisplay) {
+          event.preventDefault();
+          goToPrevVerse();
+          config.onPrevVerse?.();
+        }
         break;
         
       default:
@@ -94,7 +99,7 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
     }
   }, [
     config,
-    detectionQueue,
+    pendingQueue,
     approvedQueue,
     currentDisplay,
     approveDetection,
@@ -102,6 +107,8 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
     displayScripture,
     clearDisplay,
     togglePause,
+    goToNextVerse,
+    goToPrevVerse,
   ]);
   
   useEffect(() => {
@@ -110,11 +117,11 @@ export function useKeyboardShortcuts(config: ShortcutConfig) {
   }, [handleKeyDown]);
 }
 
-// Shortcut reference for help display
 export const SHORTCUTS = [
   { key: 'Enter', action: 'Approve pending / Display approved' },
   { key: 'Esc', action: 'Clear display / Dismiss pending' },
-  { key: 'Space', action: 'Toggle preaching mode' },
+  { key: 'Space', action: 'Pause / Resume listening' },
   { key: '/', action: 'Focus search' },
-  { key: '↑↓', action: 'Navigate queue' },
+  { key: '←', action: 'Previous verse' },
+  { key: '→', action: 'Next verse' },
 ];

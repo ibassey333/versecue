@@ -1,8 +1,6 @@
 "use client";
-
 import dynamic from 'next/dynamic';
 
-// Dynamically import the dashboard with no SSR
 const Dashboard = dynamic(() => import('@/components/Dashboard'), {
   ssr: false,
   loading: () => (

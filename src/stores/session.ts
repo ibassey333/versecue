@@ -1,50 +1,96 @@
 // ============================================
-// Session Store v1.3.1
+// Session Store v2.0
+// Merged v1.1 premium + v1.3 features
 // ============================================
 
 import { create } from 'zustand';
-import { DetectionResult, QueueItem, TranscriptSegment } from '@/types';
+import { DetectionResult, QueueItem, TranscriptSegment, SessionSettings } from '@/types';
 import { broadcastDisplay, broadcastClear } from '@/lib/broadcast';
 import { fetchVerse } from '@/lib/bible';
 
 interface SessionState {
+  // Session
   sessionId: string | null;
   startedAt: Date | null;
+  
+  // Audio
   isListening: boolean;
   isPaused: boolean;
   selectedAudioDevice: string | null;
   audioLevel: number;
+  
+  // Transcript
   transcript: TranscriptSegment[];
   interimTranscript: string;
-  detectionQueue: QueueItem[];
+  
+  // Queues (using v1.1 naming: pendingQueue)
+  pendingQueue: QueueItem[];
   approvedQueue: QueueItem[];
   currentDisplay: QueueItem | null;
-  stats: { detected: number; approved: number; displayed: number; dismissed: number };
-  settings: {
-    autoApprove: boolean;
-    translation: string;
-  };
   
+  // History
+  detectionHistory: QueueItem[];
+  displayHistory: QueueItem[];
+  
+  // Stats
+  stats: { detected: number; approved: number; displayed: number; dismissed: number };
+  
+  // Settings
+  settings: SessionSettings;
+  
+  // Actions - Session
   startSession: () => void;
   endSession: () => void;
+  newSession: () => void;
+  
+  // Actions - Audio
   toggleListening: () => void;
   togglePause: () => void;
   setAudioDevice: (deviceId: string) => void;
   setAudioLevel: (level: number) => void;
+  
+  // Actions - Transcript
   addTranscriptSegment: (segment: TranscriptSegment) => void;
   setInterimTranscript: (text: string) => void;
+  clearTranscript: () => void;
+  
+  // Actions - Detection
   addDetection: (detection: DetectionResult) => void;
   approveDetection: (id: string) => void;
   dismissDetection: (id: string) => void;
+  
+  // Actions - Display (v1.3: keep in queue)
   displayScripture: (id: string) => void;
+  redisplayScripture: (id: string) => void;
   clearDisplay: () => void;
+  removeFromApproved: (id: string) => void;
+  
+  // Actions - Verse Navigation (v1.3)
   goToNextVerse: () => Promise<void>;
   goToPrevVerse: () => Promise<void>;
-  removeFromApproved: (id: string) => void;
-  updateSettings: (settings: Partial<SessionState['settings']>) => void;
+  
+  // Actions - Translation
+  setTranslation: (translation: string) => void;
+  changeDisplayTranslation: (translation: string) => Promise<void>;
+  
+  // Actions - Settings
+  updateSettings: (settings: Partial<SessionSettings>) => void;
+  
+  // Export
+  getExportData: () => unknown;
 }
 
 const AUTO_APPROVE_THRESHOLD = 0.85;
+
+const DEFAULT_SETTINGS: SessionSettings = {
+  translation: 'KJV',
+  autoApproveHighConfidence: true,
+  keyboardShortcutsEnabled: true,
+  theme: 'dark',
+  quickTranslations: ['KJV', 'WEB', 'ASV'],
+  speechProvider: 'browser',
+  enableLLMDetection: true,
+};
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   sessionId: null,
@@ -55,42 +101,59 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   audioLevel: 0,
   transcript: [],
   interimTranscript: '',
-  detectionQueue: [],
+  pendingQueue: [],
   approvedQueue: [],
   currentDisplay: null,
+  detectionHistory: [],
+  displayHistory: [],
   stats: { detected: 0, approved: 0, displayed: 0, dismissed: 0 },
-  settings: {
-    autoApprove: true,
-    translation: 'KJV',
-  },
+  settings: DEFAULT_SETTINGS,
   
+  // ========== SESSION ==========
   startSession: () => set({
     sessionId: `session_${Date.now()}`,
     startedAt: new Date(),
+  }),
+  
+  endSession: () => set({ 
+    isListening: false, 
+    isPaused: false,
+  }),
+  
+  // New session clears everything
+  newSession: () => set({
+    sessionId: `session_${Date.now()}`,
+    startedAt: new Date(),
     transcript: [],
-    detectionQueue: [],
+    interimTranscript: '',
+    pendingQueue: [],
     approvedQueue: [],
     currentDisplay: null,
+    detectionHistory: [],
+    displayHistory: [],
     stats: { detected: 0, approved: 0, displayed: 0, dismissed: 0 },
   }),
   
-  endSession: () => set({ isListening: false, isPaused: false }),
-  
+  // ========== AUDIO ==========
   toggleListening: () => {
-    const { isListening } = get();
-    if (!isListening) get().startSession();
-    set({ isListening: !isListening });
+    const { isListening, sessionId } = get();
+    if (!isListening && !sessionId) get().startSession();
+    set({ isListening: !isListening, isPaused: false });
   },
   
   togglePause: () => set((s) => ({ isPaused: !s.isPaused })),
   setAudioDevice: (deviceId) => set({ selectedAudioDevice: deviceId }),
   setAudioLevel: (level) => set({ audioLevel: level }),
+  
+  // ========== TRANSCRIPT ==========
   addTranscriptSegment: (segment) => set((s) => ({ 
     transcript: [...s.transcript, segment], 
     interimTranscript: '' 
   })),
   setInterimTranscript: (text) => set({ interimTranscript: text }),
+  clearTranscript: () => set({ transcript: [], interimTranscript: '' }),
   
+  // ========== DETECTION ==========
   addDetection: (detection) => {
     const { settings } = get();
     const item: QueueItem = {
@@ -104,22 +167,25 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       detectedAt: detection.detectedAt,
     };
     
-    const shouldAutoApprove = settings.autoApprove && detection.confidenceScore >= AUTO_APPROVE_THRESHOLD;
+    const shouldAutoApprove = settings.autoApproveHighConfidence && 
+      detection.confidenceScore >= AUTO_APPROVE_THRESHOLD;
     
     set((state) => {
       // Check duplicates
-      const exists = [...state.approvedQueue, ...state.detectionQueue]
+      const exists = [...state.approvedQueue, ...state.pendingQueue]
         .some(q => q.reference.reference === item.reference.reference);
       if (exists) return state;
       
       if (shouldAutoApprove) {
         return {
-          approvedQueue: [item, ...state.approvedQueue],
+          detectionHistory: [...state.detectionHistory, item],
+          approvedQueue: [...state.approvedQueue, item],
           stats: { ...state.stats, detected: state.stats.detected + 1, approved: state.stats.approved + 1 },
         };
       } else {
         return {
-          detectionQueue: [item, ...state.detectionQueue],
+          detectionHistory: [...state.detectionHistory, item],
+          pendingQueue: [...state.pendingQueue, item],
           stats: { ...state.stats, detected: state.stats.detected + 1 },
         };
       }
@@ -127,21 +193,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
   
   approveDetection: (id) => set((state) => {
-    const item = state.detectionQueue.find((i) => i.id === id);
+    const item = state.pendingQueue.find((i) => i.id === id);
     if (!item) return state;
     return {
-      detectionQueue: state.detectionQueue.filter((i) => i.id !== id),
-      approvedQueue: [item, ...state.approvedQueue],
+      pendingQueue: state.pendingQueue.filter((i) => i.id !== id),
+      approvedQueue: [...state.approvedQueue, item],
       stats: { ...state.stats, approved: state.stats.approved + 1 },
     };
   }),
   
   dismissDetection: (id) => set((state) => ({
-    detectionQueue: state.detectionQueue.filter((i) => i.id !== id),
+    pendingQueue: state.pendingQueue.filter((i) => i.id !== id),
     stats: { ...state.stats, dismissed: state.stats.dismissed + 1 },
   })),
   
-  // Display and KEEP in approved queue (mark as shown)
+  // ========== DISPLAY (v1.3: KEEP in queue) ==========
   displayScripture: (id) => {
     const state = get();
     const item = state.approvedQueue.find((i) => i.id === id);
@@ -152,6 +218,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     
     set((s) => ({
       currentDisplay: displayItem,
+      displayHistory: [...s.displayHistory.filter(h => h.id !== id), displayItem],
+      // KEEP in queue, just mark as displayed
       approvedQueue: s.approvedQueue.map(q => 
         q.id === id ? { ...q, displayedAt: new Date() } : q
       ),
@@ -159,12 +227,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }));
   },
   
+  redisplayScripture: (id) => {
+    const state = get();
+    const item = state.approvedQueue.find((i) => i.id === id);
+    if (!item) return;
+    
+    const displayItem = { ...item, displayedAt: new Date() };
+    broadcastDisplay(displayItem);
+    set({ currentDisplay: displayItem });
+  },
+  
   clearDisplay: () => { 
     broadcastClear(); 
     set({ currentDisplay: null }); 
   },
   
-  // Go to NEXT verse (single verse, not cumulative)
+  removeFromApproved: (id) => set((s) => ({
+    approvedQueue: s.approvedQueue.filter((i) => i.id !== id),
+  })),
+  
+  // ========== VERSE NAVIGATION (v1.3) ==========
   goToNextVerse: async () => {
     const { currentDisplay, settings } = get();
     if (!currentDisplay) return;
@@ -199,13 +281,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ currentDisplay: newItem });
   },
   
-  // Go to PREVIOUS verse
   goToPrevVerse: async () => {
     const { currentDisplay, settings } = get();
     if (!currentDisplay) return;
     
     const ref = currentDisplay.reference;
-    const prevVerseNum = (ref.verseStart || 1) - 1;
+    const prevVerseNum = (ref.verseStart || 2) - 1;
     if (prevVerseNum < 1) return;
     
     const prevRef = {
@@ -235,11 +316,43 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ currentDisplay: newItem });
   },
   
-  removeFromApproved: (id) => set((s) => ({
-    approvedQueue: s.approvedQueue.filter((i) => i.id !== id),
+  // ========== TRANSLATION ==========
+  setTranslation: (translation) => set((s) => ({
+    settings: { ...s.settings, translation },
   })),
   
+  changeDisplayTranslation: async (translation) => {
+    const { currentDisplay } = get();
+    if (!currentDisplay) return;
+    
+    const verse = await fetchVerse(currentDisplay.reference, translation);
+    if (!verse || !verse.text) return;
+    
+    const newItem: QueueItem = {
+      ...currentDisplay,
+      verseText: verse.text,
+      translation,
+    };
+    
+    broadcastDisplay(newItem);
+    set({ currentDisplay: newItem });
+  },
+  
+  // ========== SETTINGS ==========
   updateSettings: (newSettings) => set((s) => ({ 
     settings: { ...s.settings, ...newSettings } 
   })),
+  
+  // ========== EXPORT ==========
+  getExportData: () => {
+    const state = get();
+    return {
+      sessionId: state.sessionId,
+      startedAt: state.startedAt,
+      endedAt: new Date(),
+      transcript: state.transcript,
+      scriptures: state.displayHistory,
+      stats: state.stats,
+    };
+  },
 }));

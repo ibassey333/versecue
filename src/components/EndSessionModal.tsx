@@ -59,7 +59,7 @@ export function EndSessionModal({ isOpen, onClose, startTime }: EndSessionModalP
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-verse-border">
           <h2 className="font-display text-xl font-semibold text-verse-text">End Session</h2>
-          <button onClick={onClose} className="p-2 text-verse-muted hover:text-verse-text transition-colors">
+          <button onClick={() => { setStatus("idle"); setSavedSession(null); onClose(); }} className="p-2 text-verse-muted hover:text-verse-text transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>

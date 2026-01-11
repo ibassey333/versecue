@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { 
   BookOpen, Keyboard, HelpCircle, Mic, MicOff, Pause, Play, 
   Settings, Volume2, History, ChevronLeft, ChevronRight, RefreshCw,
-  X, Check, Search, AlertCircle, CheckCircle2
+  X, Check, Search, AlertCircle, CheckCircle2, Zap
 } from 'lucide-react';
 import { cn, formatTime } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
@@ -20,20 +20,16 @@ import { parseScriptures } from '@/lib/detection/parser';
 // API Status Component
 // ============================================
 function ApiStatus() {
-  const hasApiBible = typeof process !== 'undefined' && !!process.env.NEXT_PUBLIC_API_BIBLE_KEY;
-  const hasDeepgram = typeof process !== 'undefined' && !!process.env.NEXT_PUBLIC_DEEPGRAM_KEY;
-  const hasGroq = typeof process !== 'undefined' && !!process.env.NEXT_PUBLIC_GROQ_API_KEY;
+  const hasApiBible = !!process.env.NEXT_PUBLIC_API_BIBLE_KEY;
+  const hasDeepgram = !!process.env.NEXT_PUBLIC_DEEPGRAM_KEY;
+  const hasGroq = !!process.env.NEXT_PUBLIC_GROQ_API_KEY;
   
   return (
     <div className="mt-4 pt-4 border-t border-verse-border">
       <h4 className="text-xs font-medium text-verse-subtle uppercase tracking-wide mb-3">API Status</h4>
       <div className="grid grid-cols-3 gap-3">
         <div className="flex items-center gap-2 p-2 rounded-lg bg-verse-bg">
-          {hasApiBible ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-yellow-500" />
-          )}
+          {hasApiBible ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-yellow-500" />}
           <div>
             <p className="text-xs font-medium text-verse-text">API.Bible</p>
             <p className="text-[10px] text-verse-muted">{hasApiBible ? 'Connected' : 'Not set'}</p>
@@ -41,11 +37,7 @@ function ApiStatus() {
         </div>
         
         <div className="flex items-center gap-2 p-2 rounded-lg bg-verse-bg">
-          {hasDeepgram ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-verse-muted" />
-          )}
+          {hasDeepgram ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-verse-muted" />}
           <div>
             <p className="text-xs font-medium text-verse-text">Deepgram</p>
             <p className="text-[10px] text-verse-muted">{hasDeepgram ? 'Connected' : 'Optional'}</p>
@@ -53,11 +45,7 @@ function ApiStatus() {
         </div>
         
         <div className="flex items-center gap-2 p-2 rounded-lg bg-verse-bg">
-          {hasGroq ? (
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-verse-muted" />
-          )}
+          {hasGroq ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-verse-muted" />}
           <div>
             <p className="text-xs font-medium text-verse-text">Groq</p>
             <p className="text-[10px] text-verse-muted">{hasGroq ? 'Connected' : 'Optional'}</p>
@@ -72,14 +60,14 @@ function ApiStatus() {
 }
 
 // ============================================
-// Sub-components
+// Audio Controls with Provider Indicator
 // ============================================
-
-function AudioControls({ devices, isSupported, error, audioLevel, className }: {
+function AudioControls({ devices, isSupported, error, audioLevel, speechProvider, className }: {
   devices: AudioDevice[];
   isSupported: boolean;
   error: string | null;
   audioLevel: number;
+  speechProvider: 'browser' | 'deepgram';
   className?: string;
 }) {
   const [showSettings, setShowSettings] = useState(false);
@@ -120,17 +108,30 @@ function AudioControls({ devices, isSupported, error, audioLevel, className }: {
         </button>
         
         {isListening && (
-          <button 
-            onClick={togglePause} 
-            className={cn(
-              'flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm border transition-all',
-              isPaused 
-                ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' 
-                : 'bg-verse-border/50 border-verse-border text-verse-text hover:bg-verse-border'
-            )}
-          >
-            {isPaused ? <><Play className="w-4 h-4" /><span>Resume</span></> : <><Pause className="w-4 h-4" /><span>Pause</span></>}
-          </button>
+          <>
+            <button 
+              onClick={togglePause} 
+              className={cn(
+                'flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm border transition-all',
+                isPaused 
+                  ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' 
+                  : 'bg-verse-border/50 border-verse-border text-verse-text hover:bg-verse-border'
+              )}
+            >
+              {isPaused ? <><Play className="w-4 h-4" /><span>Resume</span></> : <><Pause className="w-4 h-4" /><span>Pause</span></>}
+            </button>
+            
+            {/* Speech Provider Indicator */}
+            <div className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium',
+              speechProvider === 'deepgram' 
+                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+                : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+            )}>
+              <Zap className="w-3 h-3" />
+              <span>{speechProvider === 'deepgram' ? 'Deepgram Active' : 'Browser Speech'}</span>
+            </div>
+          </>
         )}
         
         <button
@@ -197,9 +198,12 @@ function AudioControls({ devices, isSupported, error, audioLevel, className }: {
                 onChange={(e) => updateSettings({ speechProvider: e.target.value as 'browser' | 'deepgram' })} 
                 className="mt-2 w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50"
               >
-                <option value="browser">Browser (Free) ✓</option>
-                <option value="deepgram">Deepgram (Coming Soon)</option>
+                <option value="browser">Browser (Free)</option>
+                <option value="deepgram">Deepgram (Best Accuracy)</option>
               </select>
+              {settings.speechProvider === 'deepgram' && !process.env.NEXT_PUBLIC_DEEPGRAM_KEY && (
+                <p className="mt-1 text-[10px] text-yellow-500">⚠️ NEXT_PUBLIC_DEEPGRAM_KEY not set</p>
+              )}
             </label>
             
             <label className="block">
@@ -245,7 +249,11 @@ function AudioControls({ devices, isSupported, error, audioLevel, className }: {
   );
 }
 
-function TranscriptPanel({ className }: { className?: string }) {
+// ============================================
+// Other Components (unchanged functionality)
+// ============================================
+
+function TranscriptPanel({ speechProvider, className }: { speechProvider: 'browser' | 'deepgram'; className?: string }) {
   const transcript = useSessionStore((s) => s.transcript);
   const interimTranscript = useSessionStore((s) => s.interimTranscript);
   const isListening = useSessionStore((s) => s.isListening);
@@ -263,9 +271,19 @@ function TranscriptPanel({ className }: { className?: string }) {
             Live Transcript
           </h3>
         </div>
-        {isPaused && (
-          <span className="text-xs font-medium text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full">Paused</span>
-        )}
+        <div className="flex items-center gap-2">
+          {isListening && (
+            <span className={cn(
+              'text-[10px] px-2 py-1 rounded-full font-medium',
+              speechProvider === 'deepgram' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+            )}>
+              {speechProvider === 'deepgram' ? '🎯 Deepgram' : '🌐 Browser'}
+            </span>
+          )}
+          {isPaused && (
+            <span className="text-xs font-medium text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-full">Paused</span>
+          )}
+        </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-5 min-h-[200px] max-h-[400px]">
@@ -543,9 +561,6 @@ function SessionStats() {
   );
 }
 
-// ============================================
-// FIXED: Manual Search with actual functionality
-// ============================================
 function ManualSearch({ onSearch }: { onSearch: (ref: ScriptureReference, text: string) => Promise<void> }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -560,7 +575,6 @@ function ManualSearch({ onSearch }: { onSearch: (ref: ScriptureReference, text: 
     setLoading(true);
     
     try {
-      // Parse the query
       const parsed = parseScriptures(query);
       if (parsed.length === 0) {
         setError('Could not parse reference. Try "John 3:16" or "Psalm 23:1"');
@@ -614,6 +628,7 @@ export default function Dashboard() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [activeSpeechProvider, setActiveSpeechProvider] = useState<'browser' | 'deepgram'>('browser');
   
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
@@ -622,6 +637,13 @@ export default function Dashboard() {
   const addTranscriptSegment = useSessionStore((s) => s.addTranscriptSegment);
   const setInterimTranscript = useSessionStore((s) => s.setInterimTranscript);
   const setStoreAudioLevel = useSessionStore((s) => s.setAudioLevel);
+  
+  // Track active provider
+  useEffect(() => {
+    if (isListening) {
+      setActiveSpeechProvider(settings.speechProvider);
+    }
+  }, [isListening, settings.speechProvider]);
   
   const handleTranscript = useCallback(async (segment: TranscriptSegment) => {
     addTranscriptSegment(segment);
@@ -634,7 +656,6 @@ export default function Dashboard() {
   const handleAudioError = useCallback((error: Error) => console.error('Audio error:', error), []);
   const handleLevelChange = useCallback((level: number) => { setAudioLevel(level); setStoreAudioLevel(level); }, [setStoreAudioLevel]);
   
-  // Manual search handler
   const handleManualSearch = useCallback(async (ref: ScriptureReference, matchedText: string) => {
     const verse = await fetchVerse(ref, settings.translation);
     
@@ -717,11 +738,18 @@ export default function Dashboard() {
       )}
       
       <main className="max-w-[1800px] mx-auto px-6 py-6">
-        <AudioControls devices={devices} isSupported={isSupported} error={audioError} audioLevel={audioLevel} className="mb-6" />
+        <AudioControls 
+          devices={devices} 
+          isSupported={isSupported} 
+          error={audioError} 
+          audioLevel={audioLevel} 
+          speechProvider={activeSpeechProvider}
+          className="mb-6" 
+        />
         
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12 lg:col-span-4 space-y-6">
-            <TranscriptPanel className="h-[400px]" />
+            <TranscriptPanel speechProvider={activeSpeechProvider} className="h-[400px]" />
             <ManualSearch onSearch={handleManualSearch} />
           </div>
           

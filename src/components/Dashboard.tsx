@@ -1,5 +1,7 @@
 "use client";
 
+import Link from 'next/link';
+
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { 
   BookOpen, Keyboard, HelpCircle, Mic, MicOff, Pause, Play, 
@@ -16,6 +18,7 @@ import { fetchVerse } from '@/lib/bible';
 import { TranscriptSegment, AudioDevice, QueueItem, ScriptureReference } from '@/types';
 import { getEnabledTranslations } from '@/config/translations';
 import { parseScriptures } from '@/lib/detection/parser';
+import { EndSessionModal } from './EndSessionModal';
 
 // ============================================
 // API Status Component
@@ -149,6 +152,7 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
           <span>New Session</span>
         </button>
         
+        
         {isListening && (
           <div className="flex items-center gap-3 px-4">
             <Volume2 className="w-4 h-4 text-verse-muted" />
@@ -272,9 +276,9 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
 // Transcript Panel
 // ============================================
 function TranscriptPanel({ speechProvider, className }: { speechProvider: 'browser' | 'deepgram'; className?: string }) {
-  const transcript = useSessionStore((s) => s.transcript);
   const interimTranscript = useSessionStore((s) => s.interimTranscript);
   const { broadcastDisplay } = useDisplaySync();
+  const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
   
@@ -704,9 +708,12 @@ export default function Dashboard() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [showEndSession, setShowEndSession] = useState(false);
+  const [sessionStartTime] = useState(new Date());
   const [activeSpeechProvider, setActiveSpeechProvider] = useState<'browser' | 'deepgram'>('browser');
   
   const { broadcastDisplay } = useDisplaySync();
+  const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
   const settings = useSessionStore((s) => s.settings);
@@ -793,6 +800,10 @@ export default function Dashboard() {
                 <span className="text-sm font-medium">{isListening && !isPaused ? 'Listening' : isPaused ? 'Paused' : 'Ready'}</span>
               </div>
               
+              <Link href="/sessions" className="p-2 rounded-lg text-verse-muted hover:text-verse-text transition-colors" title="Past Sessions">
+                <History className="w-5 h-5" />
+              </Link>
+              
               <button onClick={() => setShowHelp(!showHelp)} className={cn('p-2 rounded-lg text-verse-muted hover:text-verse-text transition-colors', showHelp && 'bg-verse-border text-verse-text')}>
                 <HelpCircle className="w-5 h-5" />
               </button>
@@ -823,14 +834,26 @@ export default function Dashboard() {
       
       {/* Main Content */}
       <main className="max-w-[1800px] mx-auto px-6 py-6">
-        <AudioControls 
-          devices={devices} 
-          isSupported={isSupported} 
-          error={audioError} 
-          audioLevel={audioLevel} 
-          speechProvider={activeSpeechProvider}
-          className="mb-6" 
-        />
+        <div className="flex items-center gap-4 mb-6">
+          <AudioControls 
+            devices={devices} 
+            isSupported={isSupported} 
+            error={audioError} 
+            audioLevel={audioLevel} 
+            speechProvider={activeSpeechProvider}
+            className="flex-1" 
+          />
+          
+          {transcript.length > 0 && (
+            <button
+              onClick={() => setShowEndSession(true)}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl font-medium text-sm bg-green-600 text-white hover:bg-green-500 transition-all shadow-lg"
+            >
+              <span>💾</span>
+              <span>Save Notes</span>
+            </button>
+          )}
+        </div>
         
         {/* New Layout: 3 columns */}
         <div className="grid grid-cols-12 gap-6">
@@ -857,6 +880,12 @@ export default function Dashboard() {
       </main>
       
       {/* Footer */}
+      <EndSessionModal 
+        isOpen={showEndSession} 
+        onClose={() => setShowEndSession(false)} 
+        startTime={sessionStartTime}
+      />
+      
       <footer className="border-t border-verse-border mt-8">
         <div className="max-w-[1800px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between text-xs text-verse-muted">

@@ -9,6 +9,7 @@ import {
 import { cn, formatTime } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
 import { useKeyboardShortcuts, SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
+import { useDisplaySync } from '@/hooks/useDisplaySync';
 import { useAudioCapture } from '@/hooks/useAudioCapture';
 import { detectScriptures } from '@/lib/detection';
 import { fetchVerse } from '@/lib/bible';
@@ -273,6 +274,7 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
 function TranscriptPanel({ speechProvider, className }: { speechProvider: 'browser' | 'deepgram'; className?: string }) {
   const transcript = useSessionStore((s) => s.transcript);
   const interimTranscript = useSessionStore((s) => s.interimTranscript);
+  const { broadcastDisplay } = useDisplaySync();
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
   
@@ -704,6 +706,7 @@ export default function Dashboard() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [activeSpeechProvider, setActiveSpeechProvider] = useState<'browser' | 'deepgram'>('browser');
   
+  const { broadcastDisplay } = useDisplaySync();
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
   const settings = useSessionStore((s) => s.settings);
@@ -717,6 +720,12 @@ export default function Dashboard() {
       setActiveSpeechProvider(settings.speechProvider);
     }
   }, [isListening, settings.speechProvider]);
+
+  // Broadcast display changes to Supabase for remote display
+  const currentDisplay = useSessionStore((s) => s.currentDisplay);
+  useEffect(() => {
+    broadcastDisplay(currentDisplay);
+  }, [currentDisplay, broadcastDisplay]);
   
   const handleTranscript = useCallback(async (segment: TranscriptSegment) => {
     addTranscriptSegment(segment);

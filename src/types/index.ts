@@ -32,7 +32,8 @@ export interface QueueItem {
   confidenceScore: number;
   detectionType: 'deterministic' | 'phrase' | 'llm';
   detectedAt: Date;
-  displayedAt?: Date;
+  displayedAt?: Date | null;
+  approvedAt?: Date | null;
 }
 
 export interface TranscriptSegment {
@@ -86,4 +87,12 @@ export interface BookMetadata {
   aliases: string[];
   chapters: number;
   testament: 'old' | 'new';
+}
+
+// Session Stats
+export interface SessionStats {
+  detected: number;
+  approved: number;
+  displayed: number;
+  dismissed: number;
 }

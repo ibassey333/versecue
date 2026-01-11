@@ -240,6 +240,21 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
               />
               <span className="text-sm text-verse-text">Keyboard shortcuts</span>
             </label>
+            
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={settings.enableGroqDetection || false}
+                onChange={(e) => updateSettings({ enableGroqDetection: e.target.checked })}
+                className="w-4 h-4 rounded border-verse-border text-purple-500 focus:ring-purple-500"
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-verse-text">AI Detection (Groq)</span>
+                {settings.enableGroqDetection && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">Uses credits</span>
+                )}
+              </div>
+            </label>
           </div>
           
           <ApiStatus />
@@ -648,9 +663,9 @@ export default function Dashboard() {
   const handleTranscript = useCallback(async (segment: TranscriptSegment) => {
     addTranscriptSegment(segment);
     if (isPaused) return;
-    const detections = await detectScriptures(segment.text);
+    const detections = await detectScriptures(segment.text, settings.enableGroqDetection || false);
     for (const detection of detections) addDetection(detection);
-  }, [addDetection, addTranscriptSegment, isPaused]);
+  }, [addDetection, addTranscriptSegment, isPaused, settings.enableGroqDetection]);
   
   const handleInterim = useCallback((text: string) => setInterimTranscript(text), [setInterimTranscript]);
   const handleAudioError = useCallback((error: Error) => console.error('Audio error:', error), []);

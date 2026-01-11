@@ -1,5 +1,5 @@
 // ============================================
-// Detection Engine v3.0 - With Groq AI
+// Detection Engine v3.1 - Groq controlled by settings
 // ============================================
 
 import { ScriptureReference, DetectionResult } from '@/types';
@@ -10,7 +10,7 @@ import { fetchVerse } from '@/lib/bible';
 
 // Track recent detections
 const recentDetections = new Map<string, number>();
-const COOLDOWN_MS = 10000; // 10 seconds
+const COOLDOWN_MS = 10000;
 
 function isDuplicate(ref: string): boolean {
   const lastSeen = recentDetections.get(ref);
@@ -26,12 +26,10 @@ function isDuplicate(ref: string): boolean {
 
 /**
  * Detect scripture references in text
- * 3-stage pipeline:
- * 1. Parser (deterministic) - "John 3:16" → 95% confidence
- * 2. Phrases (quoted text) - "for God so loved" → 88% confidence  
- * 3. Groq AI (implicit) - "prodigal son" → variable confidence
+ * @param text - Text to analyze
+ * @param enableGroq - Whether to use Groq AI detection (from settings)
  */
-export async function detectScriptures(text: string): Promise<DetectionResult[]> {
+export async function detectScriptures(text: string, enableGroq: boolean = false): Promise<DetectionResult[]> {
   const results: DetectionResult[] = [];
   const translation = 'KJV';
   
@@ -91,11 +89,11 @@ export async function detectScriptures(text: string): Promise<DetectionResult[]>
     });
   }
   
-  // Stage 3: Groq AI (implicit references) - only if enabled and we haven't found much
-  const groqEnabled = process.env.NEXT_PUBLIC_GROQ_API_KEY && process.env.NEXT_PUBLIC_ENABLE_LLM_DETECTION === 'true';
+  // Stage 3: Groq AI - only if ENABLED in settings
+  const groqKeyExists = !!process.env.NEXT_PUBLIC_GROQ_API_KEY;
   
-  if (groqEnabled && results.length < 2 && text.length > 30) {
-    console.log('[VerseCue Detection] Running Groq AI detection...');
+  if (enableGroq && groqKeyExists && results.length < 2 && text.length > 30) {
+    console.log('[VerseCue Detection] 🤖 Running Groq AI detection...');
     
     try {
       const groqResults = await detectWithGroq(text);
@@ -120,11 +118,13 @@ export async function detectScriptures(text: string): Promise<DetectionResult[]>
           translation: verse?.translation || translation,
         });
         
-        console.log('[VerseCue Detection] Groq found:', groq.reference.reference, '(' + groq.matchedText + ')');
+        console.log('[VerseCue Detection] 🤖 Groq found:', groq.reference.reference);
       }
     } catch (err) {
       console.error('[VerseCue Detection] Groq error:', err);
     }
+  } else if (enableGroq && !groqKeyExists) {
+    console.log('[VerseCue Detection] Groq enabled but no API key');
   }
   
   console.log('[VerseCue Detection] Total results:', results.length);

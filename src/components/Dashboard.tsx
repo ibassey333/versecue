@@ -777,40 +777,28 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   
   return (
     <div className="min-h-screen bg-verse-bg">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-verse-border bg-verse-bg/80 backdrop-blur-xl">
-        <div className="max-w-[1800px] mx-auto px-6 py-4">
+      {/* Controls Bar */}
+      <div className="sticky top-16 z-40 border-b border-verse-border bg-verse-bg/80 backdrop-blur-xl">
+        <div className="max-w-[1800px] mx-auto px-6 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-gold-400 to-gold-600">
-                <BookOpen className="w-5 h-5 text-verse-bg" />
-              </div>
-              <div>
-                <h1 className="font-display text-xl font-bold text-gold-400">VerseCue</h1>
-                <p className="text-[10px] text-verse-muted uppercase tracking-wider">Scripture Detection</p>
-              </div>
-            </div>
-            
             <div className="flex items-center gap-4">
+              <h2 className="font-semibold text-verse-text">Live Session</h2>
               <div className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-full',
+                'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm',
                 isListening && !isPaused ? 'bg-red-500/10 text-red-500' : isPaused ? 'bg-yellow-500/10 text-yellow-500' : 'bg-verse-border/50 text-verse-muted'
               )}>
                 <div className={cn('w-2 h-2 rounded-full', isListening && !isPaused ? 'bg-red-500 animate-pulse' : isPaused ? 'bg-yellow-500' : 'bg-verse-muted')} />
-                <span className="text-sm font-medium">{isListening && !isPaused ? 'Listening' : isPaused ? 'Paused' : 'Ready'}</span>
+                <span className="font-medium">{isListening && !isPaused ? 'Listening' : isPaused ? 'Paused' : 'Ready'}</span>
               </div>
-              
-              <Link href="/sessions" className="p-2 rounded-lg text-verse-muted hover:text-verse-text transition-colors" title="Past Sessions">
-                <History className="w-5 h-5" />
-              </Link>
-              
+            </div>
+            <div className="flex items-center gap-3">
               <button onClick={() => setShowHelp(!showHelp)} className={cn('p-2 rounded-lg text-verse-muted hover:text-verse-text transition-colors', showHelp && 'bg-verse-border text-verse-text')}>
                 <HelpCircle className="w-5 h-5" />
               </button>
             </div>
           </div>
         </div>
-      </header>
+      </div>
       
       {/* Help Bar */}
       {showHelp && (

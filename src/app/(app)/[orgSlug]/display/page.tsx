@@ -6,7 +6,6 @@ import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 import { 
-  ArrowLeft, 
   Monitor, 
   Type, 
   Palette, 
@@ -542,34 +541,23 @@ export default function DisplaySettingsPage() {
 
   return (
     <div className="min-h-screen bg-verse-bg">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-verse-bg/95 backdrop-blur border-b border-verse-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link 
-              href={`/${org.slug}`}
-              className="p-2 text-verse-muted hover:text-verse-text transition-colors rounded-lg hover:bg-verse-surface"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <h1 className="font-display text-xl font-bold text-verse-text">Display Settings</h1>
-              <p className="text-sm text-verse-muted">{org.name}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+      {/* Action Bar */}
+      <div className="sticky top-16 z-10 bg-verse-bg/95 backdrop-blur border-b border-verse-border">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <h1 className="font-display text-lg font-bold text-verse-text">Display Settings</h1>
+          
+          <div className="flex items-center gap-2">
             {hasChanges && (
               <button
                 onClick={revertChanges}
-                className="px-3 py-2 text-sm text-verse-muted hover:text-verse-text transition-colors"
+                className="px-3 py-1.5 text-sm text-verse-muted hover:text-verse-text transition-colors"
               >
                 Discard
               </button>
             )}
             <button
               onClick={resetToDefaults}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-verse-border text-verse-muted hover:text-verse-text rounded-xl transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-verse-border text-verse-muted hover:text-verse-text rounded-lg transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
               <span className="hidden sm:inline">Reset</span>
@@ -577,7 +565,7 @@ export default function DisplaySettingsPage() {
             <button
               onClick={saveSettings}
               disabled={!hasChanges || saving}
-              className={`flex items-center gap-1.5 px-4 py-2 font-semibold rounded-xl transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
                 hasChanges 
                   ? 'bg-gold-500 text-verse-bg hover:bg-gold-400' 
                   : 'bg-verse-border text-verse-muted cursor-not-allowed'
@@ -592,18 +580,9 @@ export default function DisplaySettingsPage() {
               )}
               {saving ? 'Saving...' : hasChanges ? 'Save' : 'Saved'}
             </button>
-            <a
-              href={`/display/${org.slug}`}
-              target="_blank"
-              className="flex items-center gap-1.5 px-3 py-2 bg-verse-surface border border-verse-border text-verse-text rounded-xl hover:bg-verse-elevated transition-colors"
-            >
-              <Monitor className="w-4 h-4" />
-              <span className="hidden sm:inline">Preview</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">

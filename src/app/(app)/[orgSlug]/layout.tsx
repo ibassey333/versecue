@@ -1,4 +1,6 @@
 import { OrgProvider } from '@/contexts/OrgContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { OrgHeader } from '@/components/OrgHeader';
 
 export default function OrgLayout({
   children,
@@ -8,8 +10,15 @@ export default function OrgLayout({
   params: { orgSlug: string };
 }) {
   return (
-    <OrgProvider slug={params.orgSlug}>
-      {children}
-    </OrgProvider>
+    <AuthProvider>
+      <OrgProvider slug={params.orgSlug}>
+        <div className="min-h-screen bg-verse-bg flex flex-col">
+          <OrgHeader />
+          <main className="flex-1">
+            {children}
+          </main>
+        </div>
+      </OrgProvider>
+    </AuthProvider>
   );
 }

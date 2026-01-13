@@ -31,6 +31,7 @@ interface DisplaySettings {
   padding: number;
   logo_url: string | null;
   logo_position: string;
+  logo_size: number;
   show_watermark: boolean;
 }
 
@@ -52,6 +53,7 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   padding: 48,
   logo_url: null,
   logo_position: 'none',
+  logo_size: 80,
   show_watermark: true,
 };
 
@@ -61,7 +63,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   const supabase = createClient();
 
   useEffect(() => {
-    // Fetch initial display state
     const fetchDisplay = async () => {
       const { data } = await supabase
         .from('display_state')
@@ -74,7 +75,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
       }
     };
 
-    // Fetch display settings
     const fetchSettings = async () => {
       const { data: org } = await supabase
         .from('organizations')
@@ -108,6 +108,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             padding: settingsData.padding ?? DEFAULT_SETTINGS.padding,
             logo_url: settingsData.logo_url,
             logo_position: settingsData.logo_position ?? DEFAULT_SETTINGS.logo_position,
+            logo_size: settingsData.logo_size ?? DEFAULT_SETTINGS.logo_size,
             show_watermark: settingsData.show_watermark ?? DEFAULT_SETTINGS.show_watermark,
           });
         }
@@ -146,8 +147,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           schema: 'public',
           table: 'display_settings',
         },
-        (payload) => {
-          // Refetch settings on any update
+        () => {
           fetchSettings();
         }
       )
@@ -171,9 +171,16 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     bottom: 'justify-end pb-8',
   }[settings.vertical_align] || 'justify-center';
 
+  const logoPositionClass = {
+    'top-left': 'top-6 left-6',
+    'top-right': 'top-6 right-6',
+    'bottom-left': 'bottom-6 left-6',
+    'bottom-right': 'bottom-6 right-6',
+  }[settings.logo_position] || '';
+
   return (
     <div 
-      className={`min-h-screen flex flex-col ${verticalAlignClass}`}
+      className={`min-h-screen flex flex-col ${verticalAlignClass} relative`}
       style={{ 
         backgroundColor: settings.background_color,
         backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
@@ -182,6 +189,20 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
         padding: settings.padding,
       }}
     >
+      {/* Logo */}
+      {settings.logo_url && settings.logo_position !== 'none' && (
+        <img
+          src={settings.logo_url}
+          alt="Logo"
+          className={`absolute ${logoPositionClass}`}
+          style={{ 
+            width: settings.logo_size,
+            height: 'auto',
+            objectFit: 'contain',
+          }}
+        />
+      )}
+
       {display?.reference ? (
         <div 
           className="w-full max-w-6xl mx-auto"
@@ -197,6 +218,9 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
               }}
             >
               {display.reference}
+              {settings.show_translation && settings.translation_position === 'inline' && display.translation && (
+                <span style={{ color: settings.translation_color, fontSize: settings.translation_font_size, fontWeight: 'normal' }}> ({display.translation})</span>
+              )}
             </h1>
           )}
 
@@ -223,6 +247,9 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
               }}
             >
               {display.reference}
+              {settings.show_translation && settings.translation_position === 'inline' && display.translation && (
+                <span style={{ color: settings.translation_color, fontSize: settings.translation_font_size, fontWeight: 'normal' }}> ({display.translation})</span>
+              )}
             </h1>
           )}
 

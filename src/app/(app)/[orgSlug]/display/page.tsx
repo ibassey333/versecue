@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,14 +11,22 @@ import {
   Type, 
   Palette, 
   Layout, 
-  Image,
+  Image as ImageIcon,
   Loader2,
   Check,
   ExternalLink,
   RotateCcw,
-  Save
+  Save,
+  ChevronDown,
+  ChevronUp,
+  Upload,
+  X,
+  Link as LinkIcon
 } from 'lucide-react';
 import Link from 'next/link';
+
+// Constants
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Color presets for quick selection
 const COLOR_PRESETS = [
@@ -98,6 +106,7 @@ interface DisplaySettings {
   padding: number;
   logo_url: string | null;
   logo_position: string;
+  logo_size: number;
   show_watermark: boolean;
   theme_preset: string;
 }
@@ -120,11 +129,51 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   padding: 48,
   logo_url: null,
   logo_position: 'none',
+  logo_size: 80,
   show_watermark: true,
   theme_preset: 'classic',
 };
 
-// Color picker component with presets
+// Collapsible Section Component
+function Section({ 
+  title, 
+  icon: Icon, 
+  children, 
+  defaultOpen = true 
+}: { 
+  title: string; 
+  icon: any; 
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="bg-verse-surface border border-verse-border rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-verse-elevated transition-colors"
+      >
+        <h2 className="font-semibold text-verse-text flex items-center gap-2">
+          <Icon className="w-5 h-5 text-gold-500" />
+          {title}
+        </h2>
+        {isOpen ? (
+          <ChevronUp className="w-5 h-5 text-verse-muted" />
+        ) : (
+          <ChevronDown className="w-5 h-5 text-verse-muted" />
+        )}
+      </button>
+      {isOpen && (
+        <div className="px-6 pb-6 pt-2 border-t border-verse-border">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Color picker component with presets AND wheel
 function ColorPicker({ 
   value, 
   onChange, 
@@ -137,14 +186,31 @@ function ColorPicker({
   return (
     <div>
       <label className="block text-sm text-verse-muted mb-2">{label}</label>
-      <div className="space-y-2">
+      <div className="space-y-3">
+        {/* Color wheel + hex input */}
+        <div className="flex items-center gap-3">
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-12 h-10 rounded-lg cursor-pointer border-2 border-verse-border"
+          />
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="flex-1 px-3 py-2 bg-verse-bg border border-verse-border rounded-lg text-verse-text font-mono text-sm"
+            placeholder="#ffffff"
+          />
+        </div>
+        
         {/* Preset colors */}
         <div className="flex flex-wrap gap-1.5">
           {COLOR_PRESETS.map((preset) => (
             <button
               key={preset.value}
               onClick={() => onChange(preset.value)}
-              className={`w-7 h-7 rounded-lg border-2 transition-all ${
+              className={`w-6 h-6 rounded border-2 transition-all ${
                 value.toLowerCase() === preset.value.toLowerCase()
                   ? 'border-gold-500 scale-110'
                   : 'border-transparent hover:border-verse-muted'
@@ -154,22 +220,186 @@ function ColorPicker({
             />
           ))}
         </div>
-        {/* Custom color input */}
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-10 h-8 rounded cursor-pointer border-0"
-          />
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="flex-1 px-3 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text font-mono text-sm"
-          />
-        </div>
       </div>
+    </div>
+  );
+}
+
+// Image Upload Component
+function ImageUpload({
+  label,
+  value,
+  onChange,
+  orgSlug,
+  folder,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (url: string | null) => void;
+  orgSlug: string;
+  folder: 'backgrounds' | 'logos';
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const supabase = createClient();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError('');
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setError('File size must be less than 2MB');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('File must be an image');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      // Generate unique filename
+      const ext = file.name.split('.').pop();
+      const filename = `${orgSlug}/${folder}/${Date.now()}.${ext}`;
+
+      // Upload to Supabase Storage
+      const { data, error: uploadError } = await supabase.storage
+        .from('org-assets')
+        .upload(filename, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('org-assets')
+        .getPublicUrl(filename);
+
+      onChange(publicUrl);
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      setError(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUrlSubmit = () => {
+    if (urlInput.trim()) {
+      onChange(urlInput.trim());
+      setUrlInput('');
+      setShowUrlInput(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    // If it's a Supabase URL, try to delete the file
+    if (value?.includes('org-assets')) {
+      try {
+        const path = value.split('org-assets/')[1];
+        if (path) {
+          await supabase.storage.from('org-assets').remove([path]);
+        }
+      } catch (err) {
+        console.error('Failed to delete file:', err);
+      }
+    }
+    onChange(null);
+  };
+
+  return (
+    <div>
+      <label className="block text-sm text-verse-muted mb-2">{label}</label>
+      
+      {value ? (
+        <div className="relative">
+          <div className="relative aspect-video rounded-lg overflow-hidden bg-verse-bg border border-verse-border">
+            <img 
+              src={value} 
+              alt={label}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <button
+            onClick={handleRemove}
+            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {/* Upload button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-verse-border rounded-xl text-verse-muted hover:text-verse-text hover:border-verse-muted transition-colors"
+          >
+            {uploading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Upload className="w-5 h-5" />
+            )}
+            {uploading ? 'Uploading...' : 'Upload Image (max 2MB)'}
+          </button>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* URL option */}
+          {showUrlInput ? (
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="flex-1 px-3 py-2 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-sm"
+              />
+              <button
+                onClick={handleUrlSubmit}
+                className="px-3 py-2 bg-gold-500 text-verse-bg rounded-lg hover:bg-gold-400"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => setShowUrlInput(false)}
+                className="px-3 py-2 border border-verse-border text-verse-muted rounded-lg hover:bg-verse-surface"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowUrlInput(true)}
+              className="flex items-center gap-2 text-sm text-verse-muted hover:text-verse-text"
+            >
+              <LinkIcon className="w-4 h-4" />
+              Or paste image URL
+            </button>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-400">{error}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -216,6 +446,7 @@ export default function DisplaySettingsPage() {
           padding: data.padding ?? DEFAULT_SETTINGS.padding,
           logo_url: data.logo_url,
           logo_position: data.logo_position ?? DEFAULT_SETTINGS.logo_position,
+          logo_size: data.logo_size ?? DEFAULT_SETTINGS.logo_size,
           show_watermark: data.show_watermark ?? DEFAULT_SETTINGS.show_watermark,
           theme_preset: data.theme_preset ?? DEFAULT_SETTINGS.theme_preset,
         };
@@ -233,7 +464,7 @@ export default function DisplaySettingsPage() {
     setHasChanges(JSON.stringify(settings) !== JSON.stringify(savedSettings));
   }, [settings, savedSettings]);
 
-  // Update local setting (no auto-save)
+  // Update local setting
   const updateSetting = <K extends keyof DisplaySettings>(key: K, value: DisplaySettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
@@ -303,18 +534,17 @@ export default function DisplaySettingsPage() {
     mono: 'font-mono',
   }[settings.verse_font_family] || 'font-serif';
 
-  // Compute preview styles for vertical alignment
   const verticalAlignStyle = {
-    top: 'justify-start pt-8',
+    top: 'justify-start pt-4',
     center: 'justify-center',
-    bottom: 'justify-end pb-8',
+    bottom: 'justify-end pb-4',
   }[settings.vertical_align] || 'justify-center';
 
   return (
     <div className="min-h-screen bg-verse-bg">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-verse-bg/95 backdrop-blur border-b border-verse-border">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link 
               href={`/${org.slug}`}
@@ -328,26 +558,26 @@ export default function DisplaySettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             {hasChanges && (
               <button
                 onClick={revertChanges}
-                className="px-4 py-2 text-sm text-verse-muted hover:text-verse-text transition-colors"
+                className="px-3 py-2 text-sm text-verse-muted hover:text-verse-text transition-colors"
               >
-                Discard Changes
+                Discard
               </button>
             )}
             <button
               onClick={resetToDefaults}
-              className="flex items-center gap-2 px-4 py-2 text-sm border border-verse-border text-verse-muted hover:text-verse-text rounded-xl transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-verse-border text-verse-muted hover:text-verse-text rounded-xl transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
-              Reset to Default
+              <span className="hidden sm:inline">Reset</span>
             </button>
             <button
               onClick={saveSettings}
               disabled={!hasChanges || saving}
-              className={`flex items-center gap-2 px-4 py-2 font-semibold rounded-xl transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-2 font-semibold rounded-xl transition-colors ${
                 hasChanges 
                   ? 'bg-gold-500 text-verse-bg hover:bg-gold-400' 
                   : 'bg-verse-border text-verse-muted cursor-not-allowed'
@@ -355,65 +585,59 @@ export default function DisplaySettingsPage() {
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
+              ) : hasChanges ? (
                 <Save className="w-4 h-4" />
+              ) : (
+                <Check className="w-4 h-4" />
               )}
-              {saving ? 'Saving...' : hasChanges ? 'Save Changes' : 'Saved'}
+              {saving ? 'Saving...' : hasChanges ? 'Save' : 'Saved'}
             </button>
             <a
               href={`/display/${org.slug}`}
               target="_blank"
-              className="flex items-center gap-2 px-4 py-2 bg-verse-surface border border-verse-border text-verse-text font-medium rounded-xl hover:bg-verse-elevated transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 bg-verse-surface border border-verse-border text-verse-text rounded-xl hover:bg-verse-elevated transition-colors"
             >
               <Monitor className="w-4 h-4" />
-              Preview
+              <span className="hidden sm:inline">Preview</span>
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
           {/* Settings Panel */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Theme Presets */}
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
-              <h2 className="font-semibold text-verse-text mb-4 flex items-center gap-2">
-                <Palette className="w-5 h-5 text-gold-500" />
-                Theme Presets
-              </h2>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+            <Section title="Theme Presets" icon={Palette} defaultOpen={true}>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {Object.entries(THEME_PRESETS).map(([key, preset]) => (
                   <button
                     key={key}
                     onClick={() => applyPreset(key)}
-                    className={`p-3 rounded-xl border-2 transition-all ${
+                    className={`p-2 rounded-xl border-2 transition-all ${
                       settings.theme_preset === key
                         ? 'border-gold-500 bg-gold-500/10'
                         : 'border-verse-border hover:border-verse-muted'
                     }`}
                   >
                     <div 
-                      className="w-full h-8 rounded-lg mb-2"
+                      className="w-full h-6 rounded-lg mb-1"
                       style={{ backgroundColor: preset.background_color }}
                     >
                       <div className="flex items-center justify-center h-full">
-                        <span style={{ color: preset.reference_color, fontSize: 10, fontWeight: 'bold' }}>Aa</span>
+                        <span style={{ color: preset.reference_color, fontSize: 9, fontWeight: 'bold' }}>Aa</span>
                       </div>
                     </div>
-                    <span className="text-xs text-verse-text">{preset.name}</span>
+                    <span className="text-[10px] text-verse-text">{preset.name}</span>
                   </button>
                 ))}
               </div>
-            </div>
+            </Section>
 
             {/* Reference */}
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
-              <h2 className="font-semibold text-verse-text mb-4 flex items-center gap-2">
-                <Type className="w-5 h-5 text-gold-500" />
-                Reference (e.g. John 3:16)
-              </h2>
+            <Section title="Reference (e.g. John 3:16)" icon={Type} defaultOpen={true}>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-verse-muted mb-2">Position</label>
@@ -425,7 +649,7 @@ export default function DisplaySettingsPage() {
                       <button
                         key={opt.value}
                         onClick={() => updateSetting('reference_position', opt.value)}
-                        className={`flex-1 py-2 px-4 rounded-xl border-2 transition-all ${
+                        className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all text-sm ${
                           settings.reference_position === opt.value
                             ? 'border-gold-500 bg-gold-500/10 text-gold-400'
                             : 'border-verse-border text-verse-muted hover:border-verse-muted'
@@ -437,7 +661,7 @@ export default function DisplaySettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Font Size: {settings.reference_font_size}px</label>
+                  <label className="block text-sm text-verse-muted mb-2">Size: {settings.reference_font_size}px</label>
                   <input
                     type="range"
                     min="24"
@@ -453,14 +677,13 @@ export default function DisplaySettingsPage() {
                   onChange={(val) => updateSetting('reference_color', val)}
                 />
               </div>
-            </div>
+            </Section>
 
             {/* Verse Text */}
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
-              <h2 className="font-semibold text-verse-text mb-4">Verse Text</h2>
+            <Section title="Verse Text" icon={Type} defaultOpen={false}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Font Size: {settings.verse_font_size}px</label>
+                  <label className="block text-sm text-verse-muted mb-2">Size: {settings.verse_font_size}px</label>
                   <input
                     type="range"
                     min="24"
@@ -471,11 +694,11 @@ export default function DisplaySettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Font Family</label>
+                  <label className="block text-sm text-verse-muted mb-2">Font</label>
                   <select
                     value={settings.verse_font_family}
                     onChange={(e) => updateSetting('verse_font_family', e.target.value)}
-                    className="w-full px-4 py-2 bg-verse-bg border border-verse-border rounded-xl text-verse-text"
+                    className="w-full px-3 py-2 bg-verse-bg border border-verse-border rounded-xl text-verse-text"
                   >
                     <option value="serif">Serif</option>
                     <option value="sans">Sans-serif</option>
@@ -488,22 +711,21 @@ export default function DisplaySettingsPage() {
                   onChange={(val) => updateSetting('verse_color', val)}
                 />
               </div>
-            </div>
+            </Section>
 
             {/* Translation */}
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
-              <h2 className="font-semibold text-verse-text mb-4">Translation Label</h2>
+            <Section title="Translation Label" icon={Type} defaultOpen={false}>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <label className="text-sm text-verse-muted">Show Translation</label>
                   <button
                     onClick={() => updateSetting('show_translation', !settings.show_translation)}
-                    className={`w-12 h-6 rounded-full transition-colors ${
+                    className={`w-11 h-6 rounded-full transition-colors ${
                       settings.show_translation ? 'bg-gold-500' : 'bg-verse-border'
                     }`}
                   >
                     <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                      settings.show_translation ? 'translate-x-6' : 'translate-x-0.5'
+                      settings.show_translation ? 'translate-x-5' : 'translate-x-0.5'
                     }`} />
                   </button>
                 </div>
@@ -514,12 +736,13 @@ export default function DisplaySettingsPage() {
                       <div className="flex gap-2">
                         {[
                           { value: 'below', label: 'Below Verse' },
-                          { value: 'corner', label: 'Bottom Corner' },
+                          { value: 'corner', label: 'Corner' },
+                          { value: 'inline', label: 'Inline (John 3:16 KJV)' },
                         ].map((opt) => (
                           <button
                             key={opt.value}
                             onClick={() => updateSetting('translation_position', opt.value)}
-                            className={`flex-1 py-2 px-4 rounded-xl border-2 transition-all text-sm ${
+                            className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all text-sm ${
                               settings.translation_position === opt.value
                                 ? 'border-gold-500 bg-gold-500/10 text-gold-400'
                                 : 'border-verse-border text-verse-muted hover:border-verse-muted'
@@ -531,7 +754,7 @@ export default function DisplaySettingsPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm text-verse-muted mb-2">Font Size: {settings.translation_font_size}px</label>
+                      <label className="block text-sm text-verse-muted mb-2">Size: {settings.translation_font_size}px</label>
                       <input
                         type="range"
                         min="12"
@@ -549,38 +772,89 @@ export default function DisplaySettingsPage() {
                   </>
                 )}
               </div>
-            </div>
+            </Section>
 
             {/* Background */}
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
-              <h2 className="font-semibold text-verse-text mb-4 flex items-center gap-2">
-                <Image className="w-5 h-5 text-gold-500" />
-                Background
-              </h2>
+            <Section title="Background" icon={ImageIcon} defaultOpen={false}>
               <div className="space-y-4">
                 <ColorPicker
                   label="Color"
                   value={settings.background_color}
                   onChange={(val) => updateSetting('background_color', val)}
                 />
+                <ImageUpload
+                  label="Background Image (optional)"
+                  value={settings.background_image_url}
+                  onChange={(url) => updateSetting('background_image_url', url)}
+                  orgSlug={org.slug}
+                  folder="backgrounds"
+                />
               </div>
-            </div>
+            </Section>
+
+            {/* Logo */}
+            <Section title="Church Logo" icon={ImageIcon} defaultOpen={false}>
+              <div className="space-y-4">
+                <ImageUpload
+                  label="Logo Image"
+                  value={settings.logo_url}
+                  onChange={(url) => updateSetting('logo_url', url)}
+                  orgSlug={org.slug}
+                  folder="logos"
+                />
+                {settings.logo_url && (
+                  <>
+                    <div>
+                      <label className="block text-sm text-verse-muted mb-2">Position</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { value: 'none', label: 'Hidden' },
+                          { value: 'top-left', label: 'Top Left' },
+                          { value: 'top-right', label: 'Top Right' },
+                          { value: 'bottom-left', label: 'Bottom Left' },
+                          { value: 'bottom-right', label: 'Bottom Right' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => updateSetting('logo_position', opt.value)}
+                            className={`py-2 px-3 rounded-xl border-2 transition-all text-sm ${
+                              settings.logo_position === opt.value
+                                ? 'border-gold-500 bg-gold-500/10 text-gold-400'
+                                : 'border-verse-border text-verse-muted hover:border-verse-muted'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-verse-muted mb-2">Size: {settings.logo_size}px</label>
+                      <input
+                        type="range"
+                        min="40"
+                        max="200"
+                        value={settings.logo_size}
+                        onChange={(e) => updateSetting('logo_size', parseInt(e.target.value))}
+                        className="w-full accent-gold-500"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </Section>
 
             {/* Layout */}
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
-              <h2 className="font-semibold text-verse-text mb-4 flex items-center gap-2">
-                <Layout className="w-5 h-5 text-gold-500" />
-                Layout
-              </h2>
+            <Section title="Layout" icon={Layout} defaultOpen={false}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Horizontal Alignment</label>
+                  <label className="block text-sm text-verse-muted mb-2">Horizontal</label>
                   <div className="flex gap-2">
                     {['left', 'center', 'right'].map((align) => (
                       <button
                         key={align}
                         onClick={() => updateSetting('text_align', align)}
-                        className={`flex-1 py-2 px-4 rounded-xl border-2 transition-all capitalize ${
+                        className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all capitalize text-sm ${
                           settings.text_align === align
                             ? 'border-gold-500 bg-gold-500/10 text-gold-400'
                             : 'border-verse-border text-verse-muted hover:border-verse-muted'
@@ -592,7 +866,7 @@ export default function DisplaySettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Vertical Position</label>
+                  <label className="block text-sm text-verse-muted mb-2">Vertical</label>
                   <div className="flex gap-2">
                     {[
                       { value: 'top', label: 'Top' },
@@ -602,7 +876,7 @@ export default function DisplaySettingsPage() {
                       <button
                         key={opt.value}
                         onClick={() => updateSetting('vertical_align', opt.value)}
-                        className={`flex-1 py-2 px-4 rounded-xl border-2 transition-all ${
+                        className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all text-sm ${
                           settings.vertical_align === opt.value
                             ? 'border-gold-500 bg-gold-500/10 text-gold-400'
                             : 'border-verse-border text-verse-muted hover:border-verse-muted'
@@ -625,12 +899,32 @@ export default function DisplaySettingsPage() {
                   />
                 </div>
               </div>
-            </div>
+            </Section>
+
+            {/* Watermark */}
+            <Section title="Watermark" icon={Type} defaultOpen={false}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm text-verse-text">Show "Powered by VerseCue"</label>
+                  <p className="text-xs text-verse-muted mt-0.5">Free plans display watermark</p>
+                </div>
+                <button
+                  onClick={() => updateSetting('show_watermark', !settings.show_watermark)}
+                  className={`w-11 h-6 rounded-full transition-colors ${
+                    settings.show_watermark ? 'bg-gold-500' : 'bg-verse-border'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    settings.show_watermark ? 'translate-x-5' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+            </Section>
           </div>
 
           {/* Live Preview */}
           <div className="lg:sticky lg:top-24 h-fit">
-            <div className="bg-verse-surface border border-verse-border rounded-2xl p-6">
+            <div className="bg-verse-surface border border-verse-border rounded-2xl p-4 sm:p-6">
               <h2 className="font-semibold text-verse-text mb-4 flex items-center gap-2">
                 <Monitor className="w-5 h-5 text-gold-500" />
                 Live Preview
@@ -639,9 +933,31 @@ export default function DisplaySettingsPage() {
                 className={`relative aspect-video rounded-xl overflow-hidden flex flex-col ${verticalAlignStyle}`}
                 style={{ 
                   backgroundColor: settings.background_color,
-                  padding: settings.padding / 2,
+                  backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  padding: settings.padding / 3,
                 }}
               >
+                {/* Logo */}
+                {settings.logo_url && settings.logo_position !== 'none' && (
+                  <img
+                    src={settings.logo_url}
+                    alt="Logo"
+                    className={`absolute ${
+                      settings.logo_position === 'top-left' ? 'top-2 left-2' :
+                      settings.logo_position === 'top-right' ? 'top-2 right-2' :
+                      settings.logo_position === 'bottom-left' ? 'bottom-2 left-2' :
+                      'bottom-2 right-2'
+                    }`}
+                    style={{ 
+                      width: settings.logo_size / 3,
+                      height: 'auto',
+                      objectFit: 'contain',
+                    }}
+                  />
+                )}
+
                 <div 
                   className="flex flex-col w-full"
                   style={{ textAlign: settings.text_align as any }}
@@ -649,13 +965,16 @@ export default function DisplaySettingsPage() {
                   {/* Reference - Top */}
                   {settings.reference_position === 'top' && (
                     <h2 
-                      className="font-bold mb-2"
+                      className="font-bold mb-1"
                       style={{ 
-                        fontSize: settings.reference_font_size / 2,
+                        fontSize: settings.reference_font_size / 3,
                         color: settings.reference_color,
                       }}
                     >
                       John 3:16
+                      {settings.show_translation && settings.translation_position === 'inline' && (
+                        <span style={{ color: settings.translation_color, fontSize: settings.translation_font_size / 3, fontWeight: 'normal' }}> (KJV)</span>
+                      )}
                     </h2>
                   )}
 
@@ -663,32 +982,35 @@ export default function DisplaySettingsPage() {
                   <p 
                     className={`${fontFamilyClass} leading-relaxed`}
                     style={{ 
-                      fontSize: settings.verse_font_size / 2.5,
+                      fontSize: settings.verse_font_size / 3,
                       color: settings.verse_color,
                     }}
                   >
-                    "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
+                    "For God so loved the world, that he gave his only begotten Son..."
                   </p>
 
                   {/* Reference - Bottom */}
                   {settings.reference_position === 'bottom' && (
                     <h2 
-                      className="font-bold mt-2"
+                      className="font-bold mt-1"
                       style={{ 
-                        fontSize: settings.reference_font_size / 2,
+                        fontSize: settings.reference_font_size / 3,
                         color: settings.reference_color,
                       }}
                     >
                       John 3:16
+                      {settings.show_translation && settings.translation_position === 'inline' && (
+                        <span style={{ color: settings.translation_color, fontSize: settings.translation_font_size / 3, fontWeight: 'normal' }}> (KJV)</span>
+                      )}
                     </h2>
                   )}
 
                   {/* Translation - Below */}
                   {settings.show_translation && settings.translation_position === 'below' && (
                     <p 
-                      className="mt-2 uppercase tracking-widest"
+                      className="mt-1 uppercase tracking-widest"
                       style={{ 
-                        fontSize: settings.translation_font_size / 2,
+                        fontSize: settings.translation_font_size / 3,
                         color: settings.translation_color,
                       }}
                     >
@@ -700,9 +1022,9 @@ export default function DisplaySettingsPage() {
                 {/* Translation - Corner */}
                 {settings.show_translation && settings.translation_position === 'corner' && (
                   <p 
-                    className="absolute bottom-2 right-3 uppercase tracking-widest"
+                    className="absolute bottom-2 right-2 uppercase tracking-widest"
                     style={{ 
-                      fontSize: settings.translation_font_size / 2,
+                      fontSize: settings.translation_font_size / 3,
                       color: settings.translation_color,
                     }}
                   >
@@ -713,8 +1035,8 @@ export default function DisplaySettingsPage() {
                 {/* Watermark */}
                 {settings.show_watermark && (
                   <div 
-                    className="absolute bottom-2 left-3 text-xs opacity-50"
-                    style={{ color: settings.translation_color, fontSize: 8 }}
+                    className="absolute bottom-1 left-2 opacity-50"
+                    style={{ color: settings.translation_color, fontSize: 6 }}
                   >
                     Powered by VerseCue
                   </div>
@@ -722,7 +1044,7 @@ export default function DisplaySettingsPage() {
               </div>
               
               <p className="text-xs text-verse-muted mt-4 text-center">
-                Display URL: <code className="text-gold-400">versecue.app/display/{org.slug}</code>
+                <code className="text-gold-400">versecue.app/display/{org.slug}</code>
               </p>
             </div>
           </div>

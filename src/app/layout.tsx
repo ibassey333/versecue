@@ -1,36 +1,22 @@
-import type { Metadata } from 'next';
-import { Inter, Playfair_Display, Crimson_Pro } from 'next/font/google';
-import './globals.css';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
 
-const inter = Inter({ 
-  subsets: ['latin'],
-  variable: '--font-body',
-});
-
-const playfair = Playfair_Display({ 
-  subsets: ['latin'],
-  variable: '--font-display',
-});
-
-const crimson = Crimson_Pro({
-  subsets: ['latin'],
-  variable: '--font-scripture',
-});
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'VerseCue - Real-time Scripture Detection',
-  description: 'AI-powered scripture detection for church worship services. The right verse, right on time.',
-  keywords: ['church', 'worship', 'scripture', 'bible', 'projection', 'media'],
+  title: "VerseCue - The right verse, right on time",
+  description: "AI-powered scripture detection and display for churches",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable} ${crimson.variable}`}>
-      <body className="font-body">{children}</body>
+    <html lang="en">
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }

@@ -1,27 +1,40 @@
 // ============================================
 // Display Sync Hook - Supabase Realtime
 // ============================================
-
 import { useEffect, useState, useCallback } from 'react';
-import { supabase, DisplayState, DISPLAY_CHANNEL } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { QueueItem } from '@/types';
 
-// Use a fixed session ID for simplicity (can be made dynamic later)
-const SESSION_ID = 'default-session';
+interface DisplayState {
+  id: string;
+  reference: string | null;
+  book: string | null;
+  chapter: number | null;
+  verse_start: number | null;
+  verse_end: number | null;
+  verse_text: string | null;
+  translation: string | null;
+  updated_at: string;
+}
 
-export function useDisplaySync() {
+export function useDisplaySync(orgSlug?: string) {
   const [isConnected, setIsConnected] = useState(false);
+  const supabase = createClient();
+  
+  // Use org slug or fallback to default
+  const sessionId = orgSlug || 'default-session';
+  const channelName = `display-${sessionId}`;
   
   // Broadcast display to all connected clients
   const broadcastDisplay = useCallback(async (item: QueueItem | null) => {
-    console.log('[DisplaySync] Broadcasting:', item?.reference.reference || 'clear');
+    console.log('[DisplaySync] Broadcasting to:', sessionId, item?.reference.reference || 'clear');
     
     try {
       if (item) {
         const { error } = await supabase
           .from('display_state')
           .upsert({
-            id: SESSION_ID,
+            id: sessionId,
             reference: item.reference.reference,
             book: item.reference.book,
             chapter: item.reference.chapter,
@@ -30,8 +43,8 @@ export function useDisplaySync() {
             verse_text: item.verseText || '',
             translation: item.translation || 'KJV',
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-        
+          });
+          
         if (error) {
           console.error('[DisplaySync] Broadcast error:', error);
         } else {
@@ -41,36 +54,66 @@ export function useDisplaySync() {
         // Clear display
         const { error } = await supabase
           .from('display_state')
-          .update({
-            reference: '',
-            verse_text: '',
+          .upsert({
+            id: sessionId,
+            reference: null,
+            book: null,
+            chapter: null,
+            verse_start: null,
+            verse_end: null,
+            verse_text: null,
+            translation: null,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', SESSION_ID);
-        
-        if (error) console.error('[DisplaySync] Clear error:', error);
+          });
+          
+        if (error) {
+          console.error('[DisplaySync] Clear error:', error);
+        }
       }
     } catch (err) {
       console.error('[DisplaySync] Error:', err);
     }
-  }, []);
-  
-  return { broadcastDisplay, isConnected };
+  }, [sessionId, supabase]);
+
+  // Set up connection status
+  useEffect(() => {
+    const channel = supabase
+      .channel(channelName)
+      .on('presence', { event: 'sync' }, () => {
+        setIsConnected(true);
+      })
+      .subscribe((status) => {
+        setIsConnected(status === 'SUBSCRIBED');
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [channelName, supabase]);
+
+  return {
+    broadcastDisplay,
+    isConnected,
+  };
 }
 
-export function useDisplayReceiver() {
+// Hook for display page to receive updates
+export function useDisplayReceiver(orgSlug: string) {
   const [currentDisplay, setCurrentDisplay] = useState<DisplayState | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const supabase = createClient();
   
+  const sessionId = orgSlug;
+  const channelName = `display-${sessionId}`;
+
   useEffect(() => {
-    console.log('[DisplayReceiver] Setting up realtime subscription...');
+    console.log('[DisplayReceiver] Setting up for:', sessionId);
     
     // Initial fetch
     const fetchInitial = async () => {
       const { data, error } = await supabase
         .from('display_state')
         .select('*')
-        .eq('id', SESSION_ID)
+        .eq('id', sessionId)
         .single();
       
       if (data && data.reference) {
@@ -83,36 +126,37 @@ export function useDisplayReceiver() {
     
     // Subscribe to realtime changes
     const channel = supabase
-      .channel(DISPLAY_CHANNEL)
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'display_state',
-          filter: `id=eq.${SESSION_ID}`,
+          filter: `id=eq.${sessionId}`,
         },
         (payload) => {
           console.log('[DisplayReceiver] Realtime update:', payload);
           const newData = payload.new as DisplayState;
           
-          if (newData && newData.reference) {
+          if (newData) {
             setCurrentDisplay(newData);
-          } else {
-            setCurrentDisplay(null);
           }
         }
       )
-      .subscribe((status) => {
-        console.log('[DisplayReceiver] Subscription status:', status);
-        setIsConnected(status === 'SUBSCRIBED');
-      });
-    
+      .subscribe();
+
     return () => {
-      console.log('[DisplayReceiver] Cleaning up subscription');
       supabase.removeChannel(channel);
     };
+  }, [sessionId, channelName, supabase]);
+
+  const clearDisplay = useCallback(() => {
+    setCurrentDisplay(null);
   }, []);
-  
-  return { currentDisplay, isConnected };
+
+  return {
+    currentDisplay,
+    clearDisplay,
+  };
 }

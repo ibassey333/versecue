@@ -275,9 +275,9 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
 // ============================================
 // Transcript Panel
 // ============================================
-function TranscriptPanel({ speechProvider, className }: { speechProvider: 'browser' | 'deepgram'; className?: string }) {
+function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvider: 'browser' | 'deepgram'; className?: string; orgSlug?: string }) {
   const interimTranscript = useSessionStore((s) => s.interimTranscript);
-  const { broadcastDisplay } = useDisplaySync();
+  const { broadcastDisplay } = useDisplaySync(orgSlug);
   const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
@@ -487,7 +487,7 @@ function ReadyToDisplay({ className }: { className?: string }) {
 // ============================================
 // Display Preview
 // ============================================
-function DisplayPreview() {
+function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
   const clearDisplay = useSessionStore((s) => s.clearDisplay);
   const goToNextVerse = useSessionStore((s) => s.goToNextVerse);
@@ -497,7 +497,7 @@ function DisplayPreview() {
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
         <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Display Preview</h3>
-        <a href="/display" target="_blank" className="text-xs text-verse-subtle hover:text-verse-text transition-colors">Open Display ↗</a>
+        <a href={orgSlug ? `/display/${orgSlug}` : "/display"} target="_blank" className="text-xs text-verse-subtle hover:text-verse-text transition-colors">Open Display ↗</a>
       </div>
       
       <div className="relative aspect-video bg-verse-bg">
@@ -704,7 +704,7 @@ function ManualSearch({ onSearch }: { onSearch: (ref: ScriptureReference, text: 
 // ============================================
 // Main Dashboard
 // ============================================
-export default function Dashboard() {
+export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -712,7 +712,7 @@ export default function Dashboard() {
   const [sessionStartTime] = useState(new Date());
   const [activeSpeechProvider, setActiveSpeechProvider] = useState<'browser' | 'deepgram'>('browser');
   
-  const { broadcastDisplay } = useDisplaySync();
+  const { broadcastDisplay } = useDisplaySync(orgSlug);
   const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
@@ -871,7 +871,7 @@ export default function Dashboard() {
           
           {/* Right Column: Display + Translation + Stats + Log */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
-            <DisplayPreview />
+            <DisplayPreview orgSlug={orgSlug} />
             <TranslationSelector />
             <SessionStats />
             <SessionLog />

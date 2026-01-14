@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn, formatTime } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
+import { EditableSessionModal } from './EditableSessionModal';
 import { useKeyboardShortcuts, SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import { useDisplaySync } from '@/hooks/useDisplaySync';
 import { useAudioCapture } from '@/hooks/useAudioCapture';
@@ -17,8 +18,8 @@ import { detectScriptures } from '@/lib/detection';
 import { fetchVerse } from '@/lib/bible';
 import { TranscriptSegment, AudioDevice, QueueItem, ScriptureReference } from '@/types';
 import { getEnabledTranslations } from '@/config/translations';
+import { ControlsBar, SettingsDrawer } from '@/components/dashboard-ui';
 import { parseScriptures } from '@/lib/detection/parser';
-import { EndSessionModal } from './EndSessionModal';
 
 // ============================================
 // API Status Component
@@ -43,7 +44,7 @@ function ApiStatus() {
         <div className="flex items-center gap-2 p-2 rounded-lg bg-verse-bg">
           {hasDeepgram ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-verse-muted" />}
           <div>
-            <p className="text-xs font-medium text-verse-text">Deepgram</p>
+            <p className="text-xs font-medium text-verse-text">Speech Engine</p>
             <p className="text-[10px] text-verse-muted">{hasDeepgram ? 'Connected' : 'Optional'}</p>
           </div>
         </div>
@@ -57,7 +58,7 @@ function ApiStatus() {
         </div>
       </div>
       <p className="mt-2 text-[10px] text-verse-muted">
-        KJV works offline. WEB/ASV need API.Bible. Deepgram improves speech. Groq adds AI detection.
+        KJV works offline. Other translations require internet.
       </p>
     </div>
   );
@@ -75,6 +76,7 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
   className?: string;
 }) {
   const [showSettings, setShowSettings] = useState(false);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
   const { 
     isListening, isPaused, selectedAudioDevice, settings,
     toggleListening, togglePause, setAudioDevice, newSession, updateSettings 
@@ -132,7 +134,7 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
                 : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
             )}>
               <Zap className="w-3 h-3" />
-              <span>{speechProvider === 'deepgram' ? 'Deepgram' : 'Browser'}</span>
+              <span>{speechProvider === 'deepgram' ? 'Enhanced' : 'Standard'}</span>
             </div>
             
             {settings.enableGroqDetection && (
@@ -210,7 +212,7 @@ function AudioControls({ devices, isSupported, error, audioLevel, speechProvider
                 className="mt-2 w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50"
               >
                 <option value="browser">Browser (Free)</option>
-                <option value="deepgram">Deepgram (Best Accuracy)</option>
+                <option value="deepgram">Enhanced (Best Accuracy)</option>
               </select>
             </label>
             
@@ -281,6 +283,14 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
   const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Auto-scroll to latest text
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [transcript, interimTranscript]);
   
   return (
     <div className={cn('flex flex-col rounded-xl border border-verse-border bg-verse-surface', className)}>
@@ -299,7 +309,7 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
             'text-[10px] px-2 py-1 rounded-full font-medium',
             speechProvider === 'deepgram' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
           )}>
-            {speechProvider === 'deepgram' ? '🎯 Deepgram' : '🌐 Browser'}
+            {speechProvider === 'deepgram' ? '🎯 Enhanced' : '🌐 Standard'}
           </span>
         )}
       </div>
@@ -320,6 +330,7 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
             {interimTranscript && (
               <span className="text-verse-subtle font-body text-[15px] italic">{interimTranscript}</span>
             )}
+            <div ref={scrollRef} />
           </div>
         )}
       </div>
@@ -536,6 +547,12 @@ function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
 // ============================================
 function TranslationSelector({ className }: { className?: string }) {
   const settings = useSessionStore((s) => s.settings);
+  const toggleListening = useSessionStore((s) => s.toggleListening);
+  const togglePause = useSessionStore((s) => s.togglePause);
+  const newSession = useSessionStore((s) => s.newSession);
+  const updateSettings = useSessionStore((s) => s.updateSettings);
+  const setAudioDevice = useSessionStore((s) => s.setAudioDevice);
+  const selectedAudioDevice = useSessionStore((s) => s.selectedAudioDevice);
   const setTranslation = useSessionStore((s) => s.setTranslation);
   const changeDisplayTranslation = useSessionStore((s) => s.changeDisplayTranslation);
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
@@ -707,6 +724,7 @@ function ManualSearch({ onSearch }: { onSearch: (ref: ScriptureReference, text: 
 export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [showEndSession, setShowEndSession] = useState(false);
   const [sessionStartTime] = useState(new Date());
@@ -717,6 +735,12 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
   const settings = useSessionStore((s) => s.settings);
+  const toggleListening = useSessionStore((s) => s.toggleListening);
+  const togglePause = useSessionStore((s) => s.togglePause);
+  const newSession = useSessionStore((s) => s.newSession);
+  const updateSettings = useSessionStore((s) => s.updateSettings);
+  const setAudioDevice = useSessionStore((s) => s.setAudioDevice);
+  const selectedAudioDevice = useSessionStore((s) => s.selectedAudioDevice);
   const addDetection = useSessionStore((s) => s.addDetection);
   const addTranscriptSegment = useSessionStore((s) => s.addTranscriptSegment);
   const setInterimTranscript = useSessionStore((s) => s.setInterimTranscript);
@@ -738,7 +762,37 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
     addTranscriptSegment(segment);
     if (isPaused) return;
     const detections = await detectScriptures(segment.text, settings.enableGroqDetection || false);
-    for (const detection of detections) addDetection(detection);
+    for (const detection of detections) {
+      // Check if already in pending or approved queue
+      const state = useSessionStore.getState();
+      const inPending = state.pendingQueue.find(
+        (item: any) => item.reference.reference === detection.reference.reference
+      );
+      const inApproved = state.approvedQueue.find(
+        (item: any) => item.reference.reference === detection.reference.reference
+      );
+      
+      if (inPending || inApproved) {
+        // Already in queue - move to top
+        const queueType = inPending ? 'pendingQueue' : 'approvedQueue';
+        const queue = inPending ? [...state.pendingQueue] : [...state.approvedQueue];
+        const itemIndex = queue.findIndex(
+          (item: any) => item.reference.reference === detection.reference.reference
+        );
+        
+        if (itemIndex >= 0 && itemIndex < queue.length - 1) {
+          // Move to END of array (displays at TOP because queue is reversed)
+          const item = queue[itemIndex];
+          const newQueue = [...queue.slice(0, itemIndex), ...queue.slice(itemIndex + 1), item];
+          useSessionStore.setState({ [queueType]: newQueue } as any);
+          console.log('[VerseCue] Moved to top (display):', detection.reference.reference);
+        } else {
+          console.log('[VerseCue] Already at top:', detection.reference.reference);
+        }
+      } else {
+        addDetection(detection);
+      }
+    }
   }, [addDetection, addTranscriptSegment, isPaused, settings.enableGroqDetection]);
   
   const handleInterim = useCallback((text: string) => setInterimTranscript(text), [setInterimTranscript]);
@@ -760,7 +814,32 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
       translation: settings.translation,
     };
     
-    addDetection(detection);
+    // Check if already in queue (same logic as voice detection)
+    const state = useSessionStore.getState();
+    const inPending = state.pendingQueue.find(
+      (item: any) => item.reference.reference === detection.reference.reference
+    );
+    const inApproved = state.approvedQueue.find(
+      (item: any) => item.reference.reference === detection.reference.reference
+    );
+    
+    if (inPending || inApproved) {
+      // Move to top instead of duplicating
+      const queueType = inPending ? 'pendingQueue' : 'approvedQueue';
+      const queue = inPending ? [...state.pendingQueue] : [...state.approvedQueue];
+      const itemIndex = queue.findIndex(
+        (item: any) => item.reference.reference === detection.reference.reference
+      );
+      
+      if (itemIndex >= 0 && itemIndex < queue.length - 1) {
+        const item = queue[itemIndex];
+        const newQueue = [...queue.slice(0, itemIndex), ...queue.slice(itemIndex + 1), item];
+        useSessionStore.setState({ [queueType]: newQueue } as any);
+        console.log('[VerseCue] Search: Moved to top:', detection.reference.reference);
+      }
+    } else {
+      addDetection(detection);
+    }
   }, [addDetection, settings.translation]);
   
   const { devices, isSupported, error: audioError } = useAudioCapture({ 
@@ -778,70 +857,25 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   return (
     <div className="min-h-screen bg-verse-bg">
       {/* Controls Bar */}
-      <div className="sticky top-16 z-40 border-b border-verse-border bg-verse-bg/80 backdrop-blur-xl">
-        <div className="max-w-[1800px] mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h2 className="font-semibold text-verse-text">Live Session</h2>
-              <div className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm',
-                isListening && !isPaused ? 'bg-red-500/10 text-red-500' : isPaused ? 'bg-yellow-500/10 text-yellow-500' : 'bg-verse-border/50 text-verse-muted'
-              )}>
-                <div className={cn('w-2 h-2 rounded-full', isListening && !isPaused ? 'bg-red-500 animate-pulse' : isPaused ? 'bg-yellow-500' : 'bg-verse-muted')} />
-                <span className="font-medium">{isListening && !isPaused ? 'Listening' : isPaused ? 'Paused' : 'Ready'}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowHelp(!showHelp)} className={cn('p-2 rounded-lg text-verse-muted hover:text-verse-text transition-colors', showHelp && 'bg-verse-border text-verse-text')}>
-                <HelpCircle className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ControlsBar
+        isListening={isListening}
+        isPaused={isPaused}
+        onStartListening={toggleListening}
+        onStopListening={toggleListening}
+        onTogglePause={togglePause}
+        onNewSession={newSession}
+        translation={settings.translation}
+        onTranslationChange={(t: string) => updateSettings({ translation: t })}
+        availableTranslations={getEnabledTranslations().map(t => t.id)}
+        onOpenSettings={() => setShowSettings(true)}
+        showSaveNotes={transcript.length > 0}
+        onSaveNotes={() => setShowEndSession(true)}
+      />
       
-      {/* Help Bar */}
-      {showHelp && (
-        <div className="border-b border-verse-border bg-verse-surface/50">
-          <div className="max-w-[1800px] mx-auto px-6 py-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Keyboard className="w-4 h-4 text-gold-400" />
-              <h3 className="font-semibold text-sm text-verse-text">Keyboard Shortcuts</h3>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              {SHORTCUTS.map(({ key, action }) => (
-                <div key={key} className="flex items-center gap-2">
-                  <kbd className="px-2 py-1 rounded bg-verse-border text-verse-text font-mono text-xs">{key}</kbd>
-                  <span className="text-sm text-verse-subtle">{action}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+
       
       {/* Main Content */}
       <main className="max-w-[1800px] mx-auto px-6 py-6">
-        <div className="flex items-center gap-4 mb-6">
-          <AudioControls 
-            devices={devices} 
-            isSupported={isSupported} 
-            error={audioError} 
-            audioLevel={audioLevel} 
-            speechProvider={activeSpeechProvider}
-            className="flex-1" 
-          />
-          
-          {transcript.length > 0 && (
-            <button
-              onClick={() => setShowEndSession(true)}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl font-medium text-sm bg-green-600 text-white hover:bg-green-500 transition-all shadow-lg"
-            >
-              <span>💾</span>
-              <span>Save Notes</span>
-            </button>
-          )}
-        </div>
         
         {/* New Layout: 3 columns */}
         <div className="grid grid-cols-12 gap-6">
@@ -868,12 +902,34 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
       </main>
       
       {/* Footer */}
-      <EndSessionModal 
+      <EditableSessionModal 
         isOpen={showEndSession} 
         onClose={() => setShowEndSession(false)} 
-        startTime={sessionStartTime}
+        
       />
       
+      {/* Settings Drawer */}
+      <SettingsDrawer
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        audioDevices={devices}
+        selectedDevice={selectedAudioDevice || ''}
+        onDeviceChange={setAudioDevice}
+        speechProvider={settings.speechProvider}
+        onSpeechProviderChange={(p: 'browser' | 'deepgram') => updateSettings({ speechProvider: p })}
+        deepgramAvailable={true}
+        aiDetectionEnabled={settings.enableGroqDetection || false}
+        onAiDetectionChange={(e: boolean) => updateSettings({ enableGroqDetection: e })}
+        groqAvailable={true}
+        autoApprove={settings.autoApproveHighConfidence}
+        onAutoApproveChange={(e: boolean) => updateSettings({ autoApproveHighConfidence: e })}
+        apiStatus={{
+          bible: 'connected',
+          deepgram: 'connected',
+          groq: 'connected',
+        }}
+      />
+
       <footer className="border-t border-verse-border mt-8">
         <div className="max-w-[1800px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between text-xs text-verse-muted">

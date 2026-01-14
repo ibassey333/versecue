@@ -1,5 +1,6 @@
 // ============================================
-// Session Service - Save & Summarize with Groq
+// Session Service - Save & Summarize via API
+// Premium Edition with Review Support
 // ============================================
 
 import { supabase } from './supabase';
@@ -14,6 +15,10 @@ export interface SessionData {
   scriptures: ScriptureNote[];
   summary: string;
   key_points: string[];
+  themes?: string[];
+  scripture_groups?: ScriptureGroup[];
+  application_points?: string[];
+  needs_review?: string[];
   created_at?: string;
 }
 
@@ -24,85 +29,75 @@ export interface ScriptureNote {
   timestamp: string;
 }
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-
-// Summarize transcript with Groq
-async function summarizeWithGroq(transcript: string, scriptures: ScriptureNote[]): Promise<{ summary: string; keyPoints: string[] }> {
-  const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY;
-  
-  if (!apiKey) {
-    return {
-      summary: 'AI summary unavailable - no API key configured.',
-      keyPoints: ['Enable Groq API for automatic summaries'],
-    };
-  }
-  
-  const scriptureList = scriptures.map(s => s.reference).join(', ');
-  
-  const prompt = `You are a church note-taker. Based on this sermon transcript, create professional sermon notes.
-
-TRANSCRIPT:
-${transcript}
-
-SCRIPTURES REFERENCED: ${scriptureList || 'None detected'}
-
-Respond in this exact JSON format only (no markdown, no explanation):
-{
-  "summary": "A 2-3 paragraph summary of the sermon message, capturing the main theme and spiritual application. Write in third person (e.g., 'The pastor spoke about...')",
-  "keyPoints": ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"]
+export interface ScriptureGroup {
+  theme: string;
+  scriptures: string[];
+  speakerNote?: string;
 }
 
-Important:
-- Only include information from the transcript
-- Keep summary concise but meaningful
-- Extract 3-5 key points
-- Be accurate, no hallucination`;
-
+// Summarize transcript via API route
+async function summarizeViaAPI(
+  transcript: string, 
+  scriptures: ScriptureNote[]
+): Promise<{ 
+  summary: string; 
+  keyPoints: string[]; 
+  themes: string[];
+  scriptureGroups: ScriptureGroup[];
+  applicationPoints: string[];
+  needsReview: string[];
+}> {
   try {
-    const response = await fetch(GROQ_API_URL, {
+    const response = await fetch('/api/summarize', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1000,
-        temperature: 0.3,
+        transcript,
+        scriptures: scriptures.map(s => ({
+          reference: s.reference,
+          verse_text: s.verse_text,
+          context: s.context,
+        })),
       }),
     });
     
     if (!response.ok) {
-      throw new Error('Groq API error');
+      throw new Error('API request failed');
     }
     
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    const result = await response.json();
     
-    // Clean JSON
-    content = content.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(content);
+    if (result.success && result.data) {
+      return {
+        summary: result.data.summary || 'Summary unavailable',
+        keyPoints: result.data.keyPoints || [],
+        themes: result.data.themes || [],
+        scriptureGroups: result.data.scriptureGroups || [],
+        applicationPoints: result.data.applicationPoints || [],
+        needsReview: result.data.needsReview || [],
+      };
+    }
     
-    return {
-      summary: parsed.summary || 'Summary unavailable',
-      keyPoints: parsed.keyPoints || [],
-    };
+    throw new Error(result.error || 'Unknown error');
   } catch (err) {
-    console.error('[Sessions] Groq error:', err);
+    console.error('[Sessions] Summary API error:', err);
     return {
-      summary: 'Unable to generate summary. Please try again.',
+      summary: 'Unable to generate summary. Please enter manually.',
       keyPoints: [],
+      themes: [],
+      scriptureGroups: [],
+      applicationPoints: [],
+      needsReview: ['AI summary failed - manual review required'],
     };
   }
 }
 
-// Save session to Supabase
-export async function saveSession(
+// Generate session data (for preview/edit before save)
+export async function generateSessionPreview(
   transcript: TranscriptSegment[],
   detections: DetectionResult[],
   startTime: Date
-): Promise<SessionData | null> {
+): Promise<SessionData> {
   const fullTranscript = transcript.map(t => t.text).join(' ');
   const durationMinutes = Math.round((Date.now() - startTime.getTime()) / 60000);
   
@@ -110,25 +105,37 @@ export async function saveSession(
   const scriptures: ScriptureNote[] = detections.map(d => ({
     reference: d.reference.reference,
     verse_text: d.verseText || '',
-    context: d.matchedText,
+    context: d.matchedText || '',
     timestamp: new Date(d.detectedAt).toLocaleTimeString(),
   }));
   
   // Get AI summary
-  console.log('[Sessions] Generating summary...');
-  const { summary, keyPoints } = await summarizeWithGroq(fullTranscript, scriptures);
+  console.log('[Sessions] Generating preview via API...');
+  const { summary, keyPoints, themes, scriptureGroups, applicationPoints, needsReview } = 
+    await summarizeViaAPI(fullTranscript, scriptures);
   
-  const sessionData: SessionData = {
-    title: `Sermon - ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`,
+  return {
+    title: `Sermon - ${new Date().toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
+    })}`,
     date: new Date().toISOString(),
     duration_minutes: durationMinutes,
     transcript: fullTranscript,
     scriptures,
     summary,
     key_points: keyPoints,
+    themes,
+    scripture_groups: scriptureGroups,
+    application_points: applicationPoints,
+    needs_review: needsReview,
   };
-  
-  // Save to Supabase
+}
+
+// Save session to Supabase (after user edits)
+export async function saveSession(sessionData: SessionData): Promise<SessionData | null> {
   const { data, error } = await supabase
     .from('sessions')
     .insert({
@@ -145,11 +152,21 @@ export async function saveSession(
   
   if (error) {
     console.error('[Sessions] Save error:', error);
-    return sessionData; // Return data even if save fails
+    return sessionData;
   }
   
   console.log('[Sessions] Saved:', data.id);
   return { ...sessionData, id: data.id };
+}
+
+// Legacy save function (generates and saves in one step)
+export async function saveSessionLegacy(
+  transcript: TranscriptSegment[],
+  detections: DetectionResult[],
+  startTime: Date
+): Promise<SessionData | null> {
+  const preview = await generateSessionPreview(transcript, detections, startTime);
+  return saveSession(preview);
 }
 
 // Get all sessions
@@ -201,4 +218,19 @@ export async function getSession(id: string): Promise<SessionData | null> {
     key_points: JSON.parse(data.key_points || '[]'),
     created_at: data.created_at,
   };
+}
+
+// Delete session
+export async function deleteSession(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('sessions')
+    .delete()
+    .eq('id', id);
+  
+  if (error) {
+    console.error('[Sessions] Delete error:', error);
+    return false;
+  }
+  
+  return true;
 }

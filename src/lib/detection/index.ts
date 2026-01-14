@@ -10,7 +10,7 @@ import { fetchVerse } from '@/lib/bible';
 
 // Track recent detections
 const recentDetections = new Map<string, number>();
-const COOLDOWN_MS = 10000;
+const COOLDOWN_MS = 5000; // 5 seconds - prevents same-segment rapid fire // 60 seconds - prevents back-to-back duplicates
 
 function isDuplicate(ref: string): boolean {
   const lastSeen = recentDetections.get(ref);
@@ -90,9 +90,9 @@ export async function detectScriptures(text: string, enableGroq: boolean = false
   }
   
   // Stage 3: Groq AI - only if ENABLED in settings
-  const groqKeyExists = !!process.env.NEXT_PUBLIC_GROQ_API_KEY;
   
-  if (enableGroq && groqKeyExists && results.length < 2 && text.length > 30) {
+  
+  if (enableGroq && results.length < 2 && text.length > 30) {
     console.log('[VerseCue Detection] 🤖 Running Groq AI detection...');
     
     try {
@@ -123,7 +123,6 @@ export async function detectScriptures(text: string, enableGroq: boolean = false
     } catch (err) {
       console.error('[VerseCue Detection] Groq error:', err);
     }
-  } else if (enableGroq && !groqKeyExists) {
     console.log('[VerseCue Detection] Groq enabled but no API key');
   }
   

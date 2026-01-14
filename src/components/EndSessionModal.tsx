@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { X, Save, FileText, Loader2, CheckCircle2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { saveSession, SessionData } from '@/lib/sessions';
+import { saveSessionLegacy, SessionData } from '@/lib/sessions';
 import { generatePDF } from '@/lib/pdfGenerator';
 import { useSessionStore } from '@/stores/session';
 
@@ -27,7 +27,7 @@ export function EndSessionModal({ isOpen, onClose, startTime }: EndSessionModalP
     setStatus('saving');
     
     try {
-      const session = await saveSession(transcript, detectionHistory, startTime);
+      const session = await saveSessionLegacy(transcript, detectionHistory, startTime);
       if (session) {
         setSavedSession(session);
         setStatus('saved');

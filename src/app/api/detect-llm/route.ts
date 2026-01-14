@@ -1,47 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
-import { findBook, validateReference, containsTriggerKeywords } from '@/lib/detection/books';
+import { findBook, validateReference } from '@/lib/detection/books';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
-const SYSTEM_PROMPT = `You are a Bible scripture reference detector. Analyze sermon transcripts and identify Bible references.
+const SYSTEM_PROMPT = `You are a CONSERVATIVE Bible scripture reference detector. Analyze sermon transcripts and identify Bible references.
 
-EXPLICIT references directly name the book/chapter/verse.
-IMPLICIT references require biblical knowledge (e.g., "As Paul wrote to the Corinthians about love" → 1 Corinthians 13).
+CRITICAL RULES:
+1. Only return matches you are HIGHLY confident about (confidence 0.80+)
+2. It is BETTER to miss a reference than to return a false positive
+3. If the text could plausibly NOT be a scripture reference, return nothing
+4. Do not try to find scripture in greetings, casual speech, or generic statements
 
-RULES:
-1. Only identify clear references
-2. Assign confidence: 0.9+ explicit, 0.7-0.9 strong contextual, 0.5-0.7 probable
-3. Below 0.5: don't include
-4. Use Protestant canon (66 books)
+EXPLICIT references directly name the book/chapter/verse (e.g., "John 3:16")
+IMPLICIT references require biblical knowledge (e.g., "the prodigal son" → Luke 15)
+
+What to DETECT:
+- Direct scripture citations
+- Well-known biblical stories/parables mentioned by name
+- Famous biblical phrases with clear origin
+
+What to IGNORE:
+- Generic religious language ("God is good", "have faith", "amen")
+- Greetings and casual speech
+- Vague spiritual references without clear biblical origin
 
 Return ONLY valid JSON:
-{"references": [{"reference": "1 Corinthians 13", "book": "1 Corinthians", "chapter": 13, "verseStart": null, "verseEnd": null, "confidence": 0.92, "reasoning": "Paul's letter about love"}]}
+{"references": [{"reference": "Luke 15:11-32", "book": "Luke", "chapter": 15, "verseStart": 11, "verseEnd": 32, "confidence": 0.92, "reasoning": "Explicit reference to prodigal son parable"}]}
 
-If no references: {"references": []}`;
+If no clear references found: {"references": []}
+When in doubt, return empty.`;
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { transcript, context } = body;
+    const { transcript } = body;
     
-    if (!transcript || !containsTriggerKeywords(transcript)) {
+    // Only filter by minimum length
+    if (!transcript || transcript.length < 20) {
       return NextResponse.json({ success: true, data: [] });
     }
     
-    const userMessage = context
-      ? `Previous context: ${context}\n\nCurrent transcript:\n"${transcript}"`
-      : `Transcript:\n"${transcript}"`;
-    
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
+        { role: 'user', content: `Transcript: "${transcript}"` },
       ],
-      temperature: 0.3,
+      temperature: 0.2,  // Lower = more conservative
       max_tokens: 1024,
     });
     
@@ -49,7 +57,12 @@ export async function POST(request: NextRequest) {
     
     let parsed;
     try {
-      parsed = JSON.parse(responseText);
+      // Clean up response
+      let jsonStr = responseText.trim();
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+      if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+      parsed = JSON.parse(jsonStr.trim());
     } catch {
       return NextResponse.json({ success: true, data: [] });
     }
@@ -59,7 +72,9 @@ export async function POST(request: NextRequest) {
       const book = findBook(ref.book);
       if (!book) continue;
       if (!validateReference(book, ref.chapter, ref.verseStart)) continue;
-      if (ref.confidence < 0.6) continue;
+      
+      // Higher confidence threshold
+      if (ref.confidence < 0.80) continue;
       
       let referenceStr = `${book.name} ${ref.chapter}`;
       if (ref.verseStart) {

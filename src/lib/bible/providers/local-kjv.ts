@@ -107,7 +107,7 @@ export async function getVerseLocal(reference: ScriptureReference): Promise<Bibl
   
   return {
     reference: reference.reference,
-    text: verses.join(' '),
+    text: verses.join(' ').replace(/\{[^}]*\}/g, '').replace(/\s+/g, ' ').trim(),
     translation: 'KJV',
     book: reference.book,
     chapter: reference.chapter,

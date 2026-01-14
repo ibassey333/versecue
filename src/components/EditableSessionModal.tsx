@@ -4,6 +4,9 @@
 // ============================================
 'use client';
 
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
+import { saveAs } from 'file-saver';
+
 import { useState, useEffect } from 'react';
 import { X, Save, Download, RefreshCw, AlertTriangle, Check, Plus, Trash2, Edit3 } from 'lucide-react';
 import { SessionData, ScriptureNote, generateSessionPreview, saveSession } from '@/lib/sessions';
@@ -105,7 +108,7 @@ export function EditableSessionModal({ isOpen, onClose, onSaved }: EditableSessi
     }
   };
   
-  const handleDownloadPDF = async () => {
+  const handleDownloadWord = async () => {
     if (!sessionData) return;
     
     const editedData: SessionData = {
@@ -116,10 +119,186 @@ export function EditableSessionModal({ isOpen, onClose, onSaved }: EditableSessi
     };
     
     try {
-      // Generate simple text-based notes for now
+      // Create Word document with professional formatting
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: [
+            // Title
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: editedData.title,
+                  bold: true,
+                  size: 48,
+                  color: "2E74B5",
+                }),
+              ],
+              heading: HeadingLevel.TITLE,
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 400 },
+            }),
+            
+            // Date and Duration
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `${new Date(editedData.date).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })} • ${editedData.duration_minutes} minutes`,
+                  size: 22,
+                  color: "666666",
+                  italics: true,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 600 },
+            }),
+            
+            // Summary Header
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Summary",
+                  bold: true,
+                  size: 32,
+                  color: "2E74B5",
+                }),
+              ],
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400, after: 200 },
+            }),
+            
+            // Summary Content
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: editedData.summary,
+                  size: 24,
+                }),
+              ],
+              spacing: { after: 400 },
+            }),
+            
+            // Key Points Header
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Key Points",
+                  bold: true,
+                  size: 32,
+                  color: "2E74B5",
+                }),
+              ],
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400, after: 200 },
+            }),
+            
+            // Key Points List
+            ...editedData.key_points.map((point, index) => 
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `${index + 1}. `,
+                    bold: true,
+                    size: 24,
+                  }),
+                  new TextRun({
+                    text: point,
+                    size: 24,
+                  }),
+                ],
+                spacing: { after: 120 },
+              })
+            ),
+            
+            // Scriptures Header
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `Scriptures Referenced (${editedData.scriptures.length})`,
+                  bold: true,
+                  size: 32,
+                  color: "2E74B5",
+                }),
+              ],
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 400, after: 200 },
+            }),
+            
+            // Scriptures List
+            ...editedData.scriptures.map(scripture => 
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `• ${scripture.reference}`,
+                    bold: true,
+                    size: 24,
+                  }),
+                  scripture.verse_text ? new TextRun({
+                    text: ` — "${scripture.verse_text.substring(0, 100)}${scripture.verse_text.length > 100 ? '...' : ''}"`,
+                    size: 22,
+                    italics: true,
+                    color: "555555",
+                  }) : new TextRun({ text: "" }),
+                ],
+                spacing: { after: 100 },
+              })
+            ),
+            
+            // Footer
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "─".repeat(50),
+                  color: "CCCCCC",
+                }),
+              ],
+              spacing: { before: 600 },
+              alignment: AlignmentType.CENTER,
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Generated by VerseCue",
+                  size: 20,
+                  color: "999999",
+                  italics: true,
+                }),
+              ],
+              alignment: AlignmentType.CENTER,
+            }),
+          ],
+        }],
+      });
+      
+      // Generate and download
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `${editedData.title.replace(/[^a-z0-9]/gi, '_')}.docx`);
+    } catch (err) {
+      console.error('Word download failed:', err);
+      setError('Failed to generate Word document.');
+    }
+  };
+  
+  const handleDownloadText = async () => {
+    if (!sessionData) return;
+    
+    const editedData: SessionData = {
+      ...sessionData,
+      title,
+      summary,
+      key_points: keyPoints,
+    };
+    
+    try {
       const content = [
         editedData.title,
         '═'.repeat(50),
+        `${new Date(editedData.date).toLocaleDateString()} • ${editedData.duration_minutes} minutes`,
         '',
         'SUMMARY',
         '─'.repeat(30),
@@ -129,12 +308,14 @@ export function EditableSessionModal({ isOpen, onClose, onSaved }: EditableSessi
         '─'.repeat(30),
         ...editedData.key_points.map((p, i) => `${i + 1}. ${p}`),
         '',
-        'SCRIPTURES',
+        `SCRIPTURES (${editedData.scriptures.length})`,
         '─'.repeat(30),
-        ...editedData.scriptures.map(s => `• ${s.reference}`),
+        ...editedData.scriptures.map(s => `• ${s.reference}${s.verse_text ? ` — "${s.verse_text.substring(0, 80)}..."` : ''}`),
+        '',
+        '─'.repeat(50),
+        'Generated by VerseCue',
       ].join('\n');
       
-      // Create and download text file (PDF generation would need a library)
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -402,13 +583,21 @@ export function EditableSessionModal({ isOpen, onClose, onSaved }: EditableSessi
                 Cancel
               </button>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={handleDownloadPDF}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-verse-border text-verse-text hover:bg-verse-muted/20 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  Preview PDF
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadWord}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Word (.docx)
+                  </button>
+                  <button
+                    onClick={handleDownloadText}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-verse-border text-verse-text hover:bg-verse-muted/20 transition-colors text-sm"
+                  >
+                    .txt
+                  </button>
+                </div>
                 <button
                   onClick={handleSave}
                   className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gold-500 text-verse-bg font-semibold hover:bg-gold-400 transition-colors"
@@ -423,11 +612,11 @@ export function EditableSessionModal({ isOpen, onClose, onSaved }: EditableSessi
           {step === 'complete' && (
             <div className="flex items-center justify-center gap-4">
               <button
-                onClick={handleDownloadPDF}
+                onClick={handleDownloadWord}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gold-500 text-verse-bg font-semibold hover:bg-gold-400 transition-colors"
               >
                 <Download className="w-4 h-4" />
-                Download PDF
+                Download Word
               </button>
               <button
                 onClick={handleStartNewSession}

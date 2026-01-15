@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // ============================================
 // Verses API Route
 // GET /api/verses?reference=John+3:16&translation=KJV

@@ -1,18 +1,27 @@
 "use client";
-import dynamic from 'next/dynamic';
 
-const Dashboard = dynamic(() => import('@/components/Dashboard'), {
-  ssr: false,
-  loading: () => (
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { Loader2 } from 'lucide-react';
+
+export default function RootPage() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading) {
+      if (user) {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/login');
+      }
+    }
+  }, [user, loading, router]);
+
+  return (
     <div className="min-h-screen bg-verse-bg flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gold-400 mb-2">VerseCue</h1>
-        <p className="text-verse-muted">Loading...</p>
-      </div>
+      <Loader2 className="w-8 h-8 text-gold-500 animate-spin" />
     </div>
-  ),
-});
-
-export default function Home() {
-  return <Dashboard />;
+  );
 }

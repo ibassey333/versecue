@@ -285,7 +285,7 @@ export default function SessionEditorPage({
     setSaveStatus('idle');
   }, []);
 
-  // FIXED: PDF Download using jsPDF
+  // Premium PDF Download - Balanced readable design
   const handleDownloadPDF = () => {
     console.log('[Download] PDF clicked', session?.title);
     if (!session) {
@@ -296,25 +296,20 @@ export default function SessionEditorPage({
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 20;
       const contentWidth = pageWidth - (margin * 2);
-      let yPos = 20;
+      let yPos = 22;
 
-      // Title
-      doc.setFontSize(24);
+      // ===== HEADER =====
+      doc.setFontSize(22);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(26, 54, 93); // Navy
-      const titleLines = doc.splitTextToSize(session.title, contentWidth);
+      doc.setTextColor(26, 54, 93);
+      const titleLines = doc.splitTextToSize(session.title, contentWidth - 20);
       doc.text(titleLines, pageWidth / 2, yPos, { align: 'center' });
-      yPos += titleLines.length * 10 + 10;
+      yPos += titleLines.length * 9 + 4;
 
-      // Gold line
-      doc.setDrawColor(198, 169, 98);
-      doc.setLineWidth(0.5);
-      doc.line(margin, yPos, pageWidth - margin, yPos);
-      yPos += 15;
-
-      // Date & Duration
+      // Date line
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(100, 100, 100);
@@ -324,97 +319,113 @@ export default function SessionEditorPage({
         month: 'long',
         day: 'numeric',
       });
-      doc.text(`${dateStr} • ${session.duration_minutes} minutes`, pageWidth / 2, yPos, { align: 'center' });
-      yPos += 20;
+      doc.text(`${dateStr}  •  ${session.duration_minutes} min`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 8;
 
-      // Summary
-      doc.setFontSize(14);
+      // Gold accent line
+      doc.setDrawColor(198, 169, 98);
+      doc.setLineWidth(0.6);
+      doc.line(margin + 30, yPos, pageWidth - margin - 30, yPos);
+      yPos += 14;
+
+      // ===== SUMMARY =====
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(26, 54, 93);
       doc.text('Summary', margin, yPos);
-      yPos += 8;
+      yPos += 7;
 
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.setTextColor(45, 55, 72);
+      doc.setTextColor(50, 50, 50);
       const summaryLines = doc.splitTextToSize(session.summary, contentWidth);
       doc.text(summaryLines, margin, yPos);
-      yPos += summaryLines.length * 6 + 15;
+      yPos += summaryLines.length * 5 + 12;
 
-      // Check for page break
-      if (yPos > 250) {
+      // ===== KEY POINTS =====
+      if (yPos > pageHeight - 60) {
         doc.addPage();
         yPos = 20;
       }
 
-      // Key Points
-      doc.setFontSize(14);
+      doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(26, 54, 93);
       doc.text('Key Points', margin, yPos);
-      yPos += 10;
+      yPos += 8;
 
       session.key_points.forEach((point, i) => {
-        if (yPos > 270) {
+        if (yPos > pageHeight - 25) {
           doc.addPage();
           yPos = 20;
         }
         
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(198, 169, 98);
         doc.text(`${i + 1}.`, margin, yPos);
         
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(45, 55, 72);
+        doc.setTextColor(50, 50, 50);
         const pointLines = doc.splitTextToSize(point, contentWidth - 10);
         doc.text(pointLines, margin + 10, yPos);
-        yPos += pointLines.length * 6 + 8;
+        yPos += pointLines.length * 4.5 + 4;
       });
 
-      // Scriptures
+      // ===== SCRIPTURE REFERENCES =====
       if (session.scriptures.length > 0) {
-        if (yPos > 240) {
+        yPos += 8;
+        
+        if (yPos > pageHeight - 40) {
           doc.addPage();
           yPos = 20;
         }
-        
-        yPos += 10;
-        doc.setFontSize(14);
+
+        doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(26, 54, 93);
         doc.text('Scripture References', margin, yPos);
-        yPos += 10;
+        yPos += 8;
 
         session.scriptures.forEach((scripture) => {
-          if (yPos > 270) {
+          if (yPos > pageHeight - 20) {
             doc.addPage();
             yPos = 20;
           }
           
-          doc.setFontSize(11);
+          doc.setFontSize(10);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(198, 169, 98);
           doc.text(scripture.reference, margin, yPos);
-          yPos += 6;
+          yPos += 5;
           
           if (scripture.verse_text) {
+            doc.setFontSize(9);
             doc.setFont('helvetica', 'italic');
             doc.setTextColor(100, 100, 100);
-            const verseLines = doc.splitTextToSize(`"${scripture.verse_text}"`, contentWidth);
-            doc.text(verseLines, margin, yPos);
-            yPos += verseLines.length * 5 + 8;
+            const verseLines = doc.splitTextToSize(`"${scripture.verse_text}"`, contentWidth - 5);
+            doc.text(verseLines, margin + 5, yPos);
+            yPos += verseLines.length * 4 + 4;
           }
         });
       }
 
-      // Footer
-      const pageCount = doc.internal.pages.length - 1;
-      for (let i = 1; i <= pageCount; i++) {
+      // ===== FOOTER =====
+      const totalPages = doc.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
+        doc.setDrawColor(230, 230, 230);
+        doc.setLineWidth(0.3);
+        doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+        
         doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
         doc.setTextColor(150, 150, 150);
-        doc.text('Generated by VerseCue', pageWidth / 2, 290, { align: 'center' });
+        doc.text('VerseCue', margin, pageHeight - 9);
+        if (totalPages > 1) {
+          doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 9, { align: 'center' });
+        }
+        doc.text(new Date().toLocaleDateString(), pageWidth - margin, pageHeight - 9, { align: 'right' });
       }
 
       doc.save(`${session.title.replace(/[^a-z0-9]/gi, '_')}.pdf`);
@@ -426,7 +437,7 @@ export default function SessionEditorPage({
     setShowDownloadMenu(false);
   };
 
-  // FIXED: Word Download
+  // Premium Word Download - Balanced readable design
   const handleDownloadWord = async () => {
     console.log('[Download] Word clicked', session?.title);
     if (!session) {
@@ -435,85 +446,113 @@ export default function SessionEditorPage({
     }
     
     try {
+      const dateStr = new Date(session.date).toLocaleDateString('en-US', { 
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+      });
+
       const doc = new Document({
         sections: [{
-          properties: {},
+          properties: {
+            page: {
+              margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 },
+            },
+          },
           children: [
+            // Title
             new Paragraph({
               children: [
-                new TextRun({ text: session.title, bold: true, size: 56, color: "1a365d" }),
-              ],
-              heading: HeadingLevel.TITLE,
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 200 },
-            }),
-            new Paragraph({
-              children: [
-                new TextRun({ 
-                  text: new Date(session.date).toLocaleDateString('en-US', { 
-                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
-                  }), 
-                  size: 22, 
-                  color: "666666" 
-                }),
+                new TextRun({ text: session.title, bold: true, size: 48, color: "1a365d" }),
               ],
               alignment: AlignmentType.CENTER,
-              spacing: { after: 400 },
+              spacing: { after: 150 },
             }),
+            // Metadata line
             new Paragraph({
               children: [
-                new TextRun({ text: "Summary", bold: true, size: 32, color: "1a365d" }),
+                new TextRun({ text: `${dateStr}  •  ${session.duration_minutes} minutes`, size: 22, color: "888888" }),
               ],
-              heading: HeadingLevel.HEADING_1,
-              spacing: { before: 300, after: 200 },
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 100 },
             }),
+            // Gold divider
             new Paragraph({
               children: [
-                new TextRun({ text: session.summary, size: 24, color: "2d3748" }),
+                new TextRun({ text: "━━━━━━━━━━━━━━━━━━━━", color: "c6a962", size: 20 }),
               ],
-              spacing: { after: 400, line: 360 },
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 350 },
             }),
+            // Summary header
             new Paragraph({
               children: [
-                new TextRun({ text: "Key Points", bold: true, size: 32, color: "1a365d" }),
+                new TextRun({ text: "Summary", bold: true, size: 28, color: "1a365d" }),
               ],
-              heading: HeadingLevel.HEADING_1,
-              spacing: { before: 300, after: 200 },
+              spacing: { after: 150 },
             }),
+            // Summary text
+            new Paragraph({
+              children: [
+                new TextRun({ text: session.summary, size: 24, color: "333333" }),
+              ],
+              spacing: { after: 400, line: 320 },
+            }),
+            // Key Points header
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Key Points", bold: true, size: 28, color: "1a365d" }),
+              ],
+              spacing: { after: 150 },
+            }),
+            // Key points
             ...session.key_points.map((point, i) =>
               new Paragraph({
                 children: [
                   new TextRun({ text: `${i + 1}. `, bold: true, size: 24, color: "c6a962" }),
-                  new TextRun({ text: point, size: 24, color: "2d3748" }),
+                  new TextRun({ text: point, size: 24, color: "333333" }),
                 ],
-                spacing: { after: 150 },
+                spacing: { after: 120, line: 300 },
               })
             ),
+            // Scripture section
             ...(session.scriptures.length > 0 ? [
               new Paragraph({
                 children: [
-                  new TextRun({ text: "Scripture References", bold: true, size: 32, color: "1a365d" }),
+                  new TextRun({ text: "Scripture References", bold: true, size: 28, color: "1a365d" }),
                 ],
-                heading: HeadingLevel.HEADING_1,
-                spacing: { before: 400, after: 200 },
+                spacing: { before: 350, after: 150 },
               }),
               ...session.scriptures.flatMap((scripture) => [
                 new Paragraph({
                   children: [
                     new TextRun({ text: scripture.reference, bold: true, size: 24, color: "c6a962" }),
                   ],
-                  spacing: { after: 100 },
+                  spacing: { after: 80 },
                 }),
                 ...(scripture.verse_text ? [
                   new Paragraph({
                     children: [
                       new TextRun({ text: `"${scripture.verse_text}"`, italics: true, size: 22, color: "666666" }),
                     ],
-                    spacing: { after: 200 },
+                    spacing: { after: 150 },
                   }),
                 ] : []),
               ]),
             ] : []),
+            // Footer divider
+            new Paragraph({
+              children: [
+                new TextRun({ text: "─".repeat(50), color: "e0e0e0", size: 16 }),
+              ],
+              spacing: { before: 500 },
+            }),
+            // Footer
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Generated by VerseCue  •  ", size: 18, color: "aaaaaa" }),
+                new TextRun({ text: new Date().toLocaleDateString(), size: 18, color: "aaaaaa" }),
+              ],
+              spacing: { before: 100 },
+            }),
           ],
         }],
       });

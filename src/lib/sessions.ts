@@ -1,9 +1,9 @@
 // ============================================
-// Session Service - Save & Summarize via API
-// Premium Edition with Review Support
+// Premium Session Service
+// Save, Summarize, and Export Sermon Notes
 // ============================================
 
-import { supabase } from './supabase';
+import { createClient } from '@/lib/supabase/client';
 import { TranscriptSegment, DetectionResult } from '@/types';
 
 export interface SessionData {
@@ -16,8 +16,8 @@ export interface SessionData {
   summary: string;
   key_points: string[];
   themes?: string[];
-  scripture_groups?: ScriptureGroup[];
   application_points?: string[];
+  quotable_quotes?: string[];
   needs_review?: string[];
   created_at?: string;
 }
@@ -29,25 +29,24 @@ export interface ScriptureNote {
   timestamp: string;
 }
 
-export interface ScriptureGroup {
-  theme: string;
-  scriptures: string[];
-  speakerNote?: string;
-}
-
-// Summarize transcript via API route
+// ============================================
+// Summarize via API (secure, server-side)
+// ============================================
 async function summarizeViaAPI(
   transcript: string, 
   scriptures: ScriptureNote[]
 ): Promise<{ 
+  title: string;
   summary: string; 
   keyPoints: string[]; 
   themes: string[];
-  scriptureGroups: ScriptureGroup[];
   applicationPoints: string[];
+  quotableQuotes: string[];
   needsReview: string[];
 }> {
   try {
+    console.log('[Sessions] Calling /api/summarize...');
+    
     const response = await fetch('/api/summarize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,66 +60,95 @@ async function summarizeViaAPI(
       }),
     });
     
+    console.log('[Sessions] API response status:', response.status);
+    
     if (!response.ok) {
-      throw new Error('API request failed');
+      const errorText = await response.text();
+      console.error('[Sessions] API error:', errorText);
+      throw new Error(`API request failed: ${response.status}`);
     }
     
     const result = await response.json();
+    console.log('[Sessions] API result:', result.success ? 'Success' : 'Failed');
     
     if (result.success && result.data) {
       return {
+        title: result.data.title || `Sermon - ${new Date().toLocaleDateString()}`,
         summary: result.data.summary || 'Summary unavailable',
         keyPoints: result.data.keyPoints || [],
         themes: result.data.themes || [],
-        scriptureGroups: result.data.scriptureGroups || [],
         applicationPoints: result.data.applicationPoints || [],
+        quotableQuotes: result.data.quotableQuotes || [],
         needsReview: result.data.needsReview || [],
       };
     }
     
-    throw new Error(result.error || 'Unknown error');
+    throw new Error(result.error || 'Unknown API error');
   } catch (err) {
     console.error('[Sessions] Summary API error:', err);
     return {
-      summary: 'Unable to generate summary. Please enter manually.',
+      title: `Sermon - ${new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
+      })}`,
+      summary: 'Unable to generate AI summary. Please enter manually or try again.',
       keyPoints: [],
       themes: [],
-      scriptureGroups: [],
       applicationPoints: [],
+      quotableQuotes: [],
       needsReview: ['AI summary failed - manual review required'],
     };
   }
 }
 
-// Generate session data (for preview/edit before save)
+// ============================================
+// Generate Preview (for editing before save)
+// ============================================
 export async function generateSessionPreview(
   transcript: TranscriptSegment[],
   detections: DetectionResult[],
   startTime: Date
 ): Promise<SessionData> {
+  console.log('[Sessions] Generating preview...');
+  console.log('[Sessions] Transcript segments:', transcript.length);
+  console.log('[Sessions] Detections:', detections.length);
+  
   const fullTranscript = transcript.map(t => t.text).join(' ');
   const durationMinutes = Math.round((Date.now() - startTime.getTime()) / 60000);
   
-  // Build scripture notes
-  const scriptures: ScriptureNote[] = detections.map(d => ({
-    reference: d.reference.reference,
-    verse_text: d.verseText || '',
-    context: d.matchedText || '',
-    timestamp: new Date(d.detectedAt).toLocaleTimeString(),
-  }));
+  // Build scripture notes with deduplication
+  const seenRefs = new Set<string>();
+  const scriptures: ScriptureNote[] = [];
+  
+  for (const d of detections) {
+    // Normalize reference (handle Psalm vs Psalms)
+    const normalizedRef = d.reference.reference.replace(/^Psalms/, 'Psalm');
+    
+    if (!seenRefs.has(normalizedRef)) {
+      seenRefs.add(normalizedRef);
+      scriptures.push({
+        reference: d.reference.reference,
+        verse_text: d.verseText || '',
+        context: d.matchedText || '',
+        timestamp: new Date(d.detectedAt).toLocaleTimeString(),
+      });
+    }
+  }
+  
+  console.log('[Sessions] Unique scriptures:', scriptures.length);
   
   // Get AI summary
-  console.log('[Sessions] Generating preview via API...');
-  const { summary, keyPoints, themes, scriptureGroups, applicationPoints, needsReview } = 
-    await summarizeViaAPI(fullTranscript, scriptures);
+  const { 
+    title, 
+    summary, 
+    keyPoints, 
+    themes, 
+    applicationPoints, 
+    quotableQuotes, 
+    needsReview 
+  } = await summarizeViaAPI(fullTranscript, scriptures);
   
   return {
-    title: `Sermon - ${new Date().toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
-    })}`,
+    title,
     date: new Date().toISOString(),
     duration_minutes: durationMinutes,
     transcript: fullTranscript,
@@ -128,38 +156,100 @@ export async function generateSessionPreview(
     summary,
     key_points: keyPoints,
     themes,
-    scripture_groups: scriptureGroups,
     application_points: applicationPoints,
+    quotable_quotes: quotableQuotes,
     needs_review: needsReview,
   };
 }
 
-// Save session to Supabase (after user edits)
-export async function saveSession(sessionData: SessionData): Promise<SessionData | null> {
-  const { data, error } = await supabase
-    .from('sessions')
-    .insert({
-      title: sessionData.title,
-      date: sessionData.date,
-      duration_minutes: sessionData.duration_minutes,
-      transcript: sessionData.transcript,
-      scriptures: JSON.stringify(sessionData.scriptures),
-      summary: sessionData.summary,
-      key_points: JSON.stringify(sessionData.key_points),
-    })
-    .select()
-    .single();
-  
-  if (error) {
-    console.error('[Sessions] Save error:', error);
-    return sessionData;
-  }
-  
-  console.log('[Sessions] Saved:', data.id);
-  return { ...sessionData, id: data.id };
+// ============================================
+// Save Session (after user edits)
+// ============================================
+// Create client for each call to ensure fresh auth state
+function getSupabase() {
+  return createClient();
 }
 
-// Legacy save function (generates and saves in one step)
+export async function saveSession(
+  sessionData: SessionData, 
+  organizationId?: string, 
+  userId?: string
+): Promise<SessionData | null> {
+  console.log('[Sessions] Saving session:', sessionData.title);
+  console.log('[Sessions] Org ID:', organizationId, 'User ID:', userId);
+  
+  try {
+    // If no org/user provided, try to get from auth (fallback)
+    let orgId = organizationId;
+    let uId = userId;
+    
+    if (!orgId || !uId) {
+      const { data: { session } } = await getSupabase().auth.getSession();
+      if (session?.user) {
+        uId = uId || session.user.id;
+        
+        // Try organizations table first (user is owner)
+        const { data: ownedOrg } = await getSupabase()
+          .from('organizations')
+          .select('id')
+          .eq('owner_id', session.user.id)
+          .single();
+        
+        if (ownedOrg?.id) {
+          orgId = orgId || ownedOrg.id;
+        } else {
+          // Fallback to organization_members
+          const { data: membership } = await getSupabase()
+            .from('organization_members')
+            .select('organization_id')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+          orgId = orgId || membership?.organization_id;
+        }
+      }
+    }
+    
+    if (!orgId) {
+      console.error('[Sessions] No organization ID available');
+      return sessionData; // Return data so user can still download
+    }
+    
+    console.log('[Sessions] Saving for organization:', orgId);
+    
+    const { data, error } = await getSupabase()
+      .from('sessions')
+      .insert({
+        title: sessionData.title,
+        date: sessionData.date,
+        duration_minutes: sessionData.duration_minutes,
+        transcript: sessionData.transcript,
+        scriptures: JSON.stringify(sessionData.scriptures),
+        summary: sessionData.summary,
+        key_points: JSON.stringify(sessionData.key_points),
+        organization_id: orgId,
+        user_id: uId,
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('[Sessions] Supabase save error:', error);
+      // Return the data anyway so user can download
+      return sessionData;
+    }
+    
+    console.log('[Sessions] Saved successfully! ID:', data.id);
+    return { ...sessionData, id: data.id };
+  } catch (err) {
+    console.error('[Sessions] Save exception:', err);
+    // Return the data anyway so user can download
+    return sessionData;
+  }
+}
+
+// ============================================
+// Legacy Save (for backward compatibility)
+// ============================================
 export async function saveSessionLegacy(
   transcript: TranscriptSegment[],
   detections: DetectionResult[],
@@ -169,9 +259,11 @@ export async function saveSessionLegacy(
   return saveSession(preview);
 }
 
-// Get all sessions
+// ============================================
+// Get All Sessions
+// ============================================
 export async function getSessions(): Promise<SessionData[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('sessions')
     .select('*')
     .order('created_at', { ascending: false });
@@ -181,7 +273,7 @@ export async function getSessions(): Promise<SessionData[]> {
     return [];
   }
   
-  return data.map(d => ({
+  return data.map((d: any) => ({
     id: d.id,
     title: d.title,
     date: d.date,
@@ -194,9 +286,11 @@ export async function getSessions(): Promise<SessionData[]> {
   }));
 }
 
-// Get single session
+// ============================================
+// Get Single Session
+// ============================================
 export async function getSession(id: string): Promise<SessionData | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('sessions')
     .select('*')
     .eq('id', id)
@@ -220,9 +314,11 @@ export async function getSession(id: string): Promise<SessionData | null> {
   };
 }
 
-// Delete session
+// ============================================
+// Delete Session
+// ============================================
 export async function deleteSession(id: string): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('sessions')
     .delete()
     .eq('id', id);

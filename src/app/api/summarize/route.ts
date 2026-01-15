@@ -43,105 +43,114 @@ export async function POST(request: NextRequest) {
     
     // Truncate transcript if too long
     let processedTranscript = transcript;
-    if (transcript.length > 10000) {
-      const start = transcript.substring(0, 5000);
-      const end = transcript.substring(transcript.length - 4000);
+    if (transcript.length > 12000) {
+      const start = transcript.substring(0, 6000);
+      const end = transcript.substring(transcript.length - 5000);
       processedTranscript = start + '\n\n[...middle portion omitted...]\n\n' + end;
     }
     
     // ============================================
-    // PREMIUM PROMPT WITH SAFEGUARDS
+    // PREMIUM PROMPT - COMPREHENSIVE OUTPUT
     // ============================================
-    const prompt = `You are a professional church secretary creating sermon notes. Your role is to FAITHFULLY DOCUMENT what was said - nothing more, nothing less.
+    const prompt = `You are an expert church secretary creating comprehensive, professional sermon notes. Your role is to FAITHFULLY DOCUMENT everything that was taught - capturing the full depth and richness of the message.
 
-═══════════════════════════════════════════════════════════
-                    SERMON TRANSCRIPT
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
+                              SERMON TRANSCRIPT
+═══════════════════════════════════════════════════════════════════════════════
 ${processedTranscript}
 
-═══════════════════════════════════════════════════════════
-              SCRIPTURES DETECTED (${scriptureCount})
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
+                        SCRIPTURES DETECTED (${scriptureCount})
+═══════════════════════════════════════════════════════════════════════════════
 ${scriptureRefs || 'None detected'}
 
-═══════════════════════════════════════════════════════════
-                   YOUR TASK
-═══════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════════════════
+                              YOUR TASK
+═══════════════════════════════════════════════════════════════════════════════
 
-Create sermon notes in JSON format following these STRICT RULES:
+Create COMPREHENSIVE sermon notes. This is a premium document that will be shared and preserved. Capture EVERYTHING of value.
 
-█ RULE 1: TRANSCRIPT-ANCHORED ONLY
+█ SUMMARY REQUIREMENTS (2-3 substantial paragraphs):
+- This is a SUMMARY of what was TAUGHT, not a description of what happened
+- Paragraph 1: What is the MAIN MESSAGE? What is the speaker trying to teach? Start with "The sermon taught that..." or "The central message was..."
+- Paragraph 2: What key scriptures and illustrations supported this message? How did they connect?
+- Paragraph 3: What transformation or response is the speaker calling for?
+- Use the speaker's own words in "quotes" for powerful statements
+- DO NOT write "The sermon concluded with..." or "The speaker ended by..." - that's a description, not a summary
+- DO NOT summarize the ending - summarize the TEACHING CONTENT
+
+█ KEY POINTS REQUIREMENTS (7-10 points):
+- Extract EVERY significant teaching point made
+- Include the scripture reference when the speaker connected it to a point
+- Use the speaker's exact words in quotes where impactful
+- Each point should be a complete thought (1-2 sentences)
+- Don't summarize multiple points into one - give each its own line
+- Include theological insights, warnings, encouragements, and applications
+
+█ THEMES (3-5 themes):
+- Identify the major spiritual themes covered
+- Use clear, descriptive names (e.g., "True Repentance", "Grace and Transformation")
+
+█ APPLICATION POINTS (3-5 points):
+- What did the speaker ask the congregation to DO or CHANGE?
+- Include any questions the speaker posed for reflection
+- Capture the "so what" of the sermon
+
+█ STRICT ACCURACY RULES:
 - Every statement MUST come directly from the transcript
-- If you cannot find it in the text, DO NOT include it
-- Do not add interpretations or implications
-- Do not fill gaps with assumptions
+- Use "quotes" for the speaker's exact words
+- If uncertain about something, include it in needsReview
+- Do NOT add interpretations or expand on what was said
+- Do NOT hallucinate scriptures or points not mentioned
+- Better to include more than miss something important
 
-█ RULE 2: THEOLOGICAL PRECISION  
-- This is a church sermon - word choice carries theological weight
-- Preserve the speaker's EXACT theological language
-- "Christ died for all" vs "Christ died for many" - these are different theologies
-- When quoting, use the speaker's exact words
-- Do not "improve" or "clarify" religious statements
+═══════════════════════════════════════════════════════════════════════════════
 
-█ RULE 3: CONSERVATIVE APPROACH
-- When uncertain, OMIT rather than guess
-- Better to miss a point than misrepresent one
-- If a section is unclear, flag it in "needsReview"
-
-█ RULE 4: VERBATIM PREFERENCE
-- For key statements, use the speaker's exact words in "quotes"
-- Clearly mark what is a quote vs paraphrase
-- Key theological points should be quoted directly
-
-█ RULE 5: NO INFERENCE
-- Report WHAT WAS SAID, not what you think they meant
-- Do not interpret scripture meanings beyond what the speaker said
-- Do not add applications the speaker didn't mention
-
-═══════════════════════════════════════════════════════════
-
-Return ONLY this JSON structure (no markdown, no explanation):
+Return ONLY this JSON (no markdown, no explanation):
 
 {
-  "summary": "2-3 paragraph summary using ONLY information from the transcript. Use quotes for key statements. Write in third person: 'The speaker explained that...' or 'The sermon focused on...'",
+  "title": "A compelling title based on the main theme (not just 'Sermon')",
   
-  "themes": ["Theme 1 from transcript", "Theme 2 from transcript"],
+  "summary": "2-3 substantial paragraphs explaining WHAT WAS TAUGHT (not what happened). Start with the main message, then supporting points and scriptures, then the call to action. Someone reading this should understand the theological content, not just that 'a sermon was preached'.",
+  
+  "themes": ["Theme 1", "Theme 2", "Theme 3", "Theme 4"],
   
   "keyPoints": [
-    "Key point 1 - use speaker's words where possible",
-    "Key point 2 - cite relevant scripture if speaker connected them",
+    "Key point 1 with 'quoted words' and scripture reference if applicable",
+    "Key point 2 - complete thought capturing a teaching moment",
     "Key point 3",
     "Key point 4",
-    "Key point 5"
-  ],
-  
-  "scriptureGroups": [
-    {
-      "theme": "Theme name based on how speaker grouped them",
-      "scriptures": ["Reference 1", "Reference 2"],
-      "speakerNote": "Brief note on what speaker said about these (in quotes if possible)"
-    }
+    "Key point 5",
+    "Key point 6",
+    "Key point 7",
+    "Key point 8 (include more if the sermon was rich)",
+    "Key point 9",
+    "Key point 10"
   ],
   
   "applicationPoints": [
-    "Only applications the speaker EXPLICITLY stated - use quotes"
+    "Practical application 1 - what should listeners do?",
+    "Application 2 - any reflection questions posed",
+    "Application 3"
   ],
   
-  "needsReview": [
-    "List any unclear sections or uncertain interpretations here",
-    "Flag anything you're not 100% confident about"
-  ]
+  "quotableQuotes": [
+    "Memorable quote 1 from the speaker",
+    "Memorable quote 2"
+  ],
+  
+  "needsReview": []
 }
 
-REMEMBER: You are a secretary, not a theologian. Document faithfully. When in doubt, leave it out.`;
+Remember: This is a PREMIUM document. Be thorough, accurate, and comprehensive. Capture the full richness of the message.`;
 
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'user', content: prompt },
       ],
-      temperature: 0.2, // Lower = more conservative
-      max_tokens: 2500,
+      temperature: 0.25,
+      max_tokens: 3500,
     });
     
     const responseText = completion.choices[0]?.message?.content || '{}';
@@ -158,11 +167,12 @@ REMEMBER: You are a secretary, not a theologian. Document faithfully. When in do
       return NextResponse.json({
         success: true,
         data: {
+          title: parsed.title || 'Sermon Notes',
           summary: parsed.summary || '',
           keyPoints: parsed.keyPoints || [],
           themes: parsed.themes || [],
-          scriptureGroups: parsed.scriptureGroups || [],
           applicationPoints: parsed.applicationPoints || [],
+          quotableQuotes: parsed.quotableQuotes || [],
           needsReview: parsed.needsReview || [],
         },
       });
@@ -171,11 +181,12 @@ REMEMBER: You are a secretary, not a theologian. Document faithfully. When in do
       return NextResponse.json({
         success: true,
         data: {
+          title: 'Sermon Notes',
           summary: 'Summary generation completed but formatting failed.',
           keyPoints: [],
           themes: [],
-          scriptureGroups: [],
           applicationPoints: [],
+          quotableQuotes: [],
           needsReview: ['AI response parsing failed - manual entry required'],
         },
       });

@@ -38,14 +38,15 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes that don't need auth
-  const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password'];
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/pricing'];
+  const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'));
   const isApiRoute = pathname.startsWith('/api');
   const isStaticRoute = pathname.startsWith('/_next') || pathname.includes('.');
   const isDisplayRoute = pathname.startsWith('/display');
+  const isFollowRoute = pathname.startsWith('/follow'); // Future: congregation follow-along
 
-  // Allow public routes, API, static files, and display
-  if (isPublicRoute || isApiRoute || isStaticRoute || isDisplayRoute) {
+  // Allow public routes, API, static files, display, and follow routes
+  if (isPublicRoute || isApiRoute || isStaticRoute || isDisplayRoute || isFollowRoute) {
     // If logged in and trying to access login/signup, redirect to dashboard
     if (session && (pathname === '/login' || pathname === '/signup')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
@@ -60,16 +61,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Handle root path - redirect to dashboard (dashboard will handle org redirect)
-  if (pathname === '/') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
   return response;
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

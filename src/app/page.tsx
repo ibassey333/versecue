@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { 
   BookOpen, Mic, Monitor, FileText, Sparkles, Users, 
-  Check, ChevronRight, Play, ArrowRight, Menu, X,
-  Zap, Shield, Clock, Download, Brain, Globe,
-  ChevronDown, Star
-} from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+  Check, Play, ArrowRight, Menu, X,
+  Zap, Shield, Download, Brain, Globe,
+  ChevronDown, Star, Tablet, Quote
+} from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 // ============================================
 // Navigation Component
@@ -21,24 +21,23 @@ function Navigation() {
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
     
-    // Check auth
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
     
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const navLinks = [
-    { href: '#features', label: 'Features' },
-    { href: '#how-it-works', label: 'How It Works' },
-    { href: '#pricing', label: 'Pricing' },
-    { href: '#faq', label: 'FAQ' },
+    { href: "#features", label: "Features" },
+    { href: "#how-it-works", label: "How It Works" },
+    { href: "#pricing", label: "Pricing" },
+    { href: "#faq", label: "FAQ" },
   ];
 
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      isScrolled ? 'bg-verse-bg/95 backdrop-blur-xl border-b border-verse-border/50' : 'bg-transparent'
+      isScrolled ? "bg-verse-bg/95 backdrop-blur-xl border-b border-verse-border/50" : "bg-transparent"
     }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
@@ -164,7 +163,7 @@ function HeroSection() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-verse-surface border border-verse-border mb-8 animate-fade-in">
             <Sparkles className="w-4 h-4 text-gold-400" />
-            <span className="text-sm text-verse-muted">AI-Powered Scripture Detection</span>
+            <span className="text-sm text-verse-muted">Understands references, quotes, and biblical context</span>
           </div>
 
           {/* Headline */}
@@ -175,9 +174,8 @@ function HeroSection() {
 
           {/* Subheadline */}
           <p className="text-lg sm:text-xl text-verse-muted max-w-2xl mx-auto mb-10 animate-fade-in-up delay-100">
-            VerseCue listens to your sermon, automatically detects Bible references, 
-            and displays them beautifully for your congregation. No more fumbling, 
-            no more missed verses.
+            VerseCue listens as you preach and detects Bible passages in real time—whether you say 
+            &ldquo;Luke 15:11–32&rdquo; or &ldquo;the prodigal son.&rdquo; Review in a tap. Display with confidence.
           </p>
 
           {/* CTA Buttons */}
@@ -210,7 +208,7 @@ function HeroSection() {
             </div>
             <div className="flex items-center gap-2">
               <Check className="w-4 h-4 text-green-500" />
-              <span>Setup in 2 minutes</span>
+              <span>Setup in minutes</span>
             </div>
           </div>
         </div>
@@ -232,7 +230,7 @@ function HeroSection() {
                 </div>
                 <div className="flex-1 flex justify-center">
                   <div className="px-4 py-1 bg-verse-bg rounded-lg text-xs text-verse-muted">
-                    versecue.app/dashboard
+                    versecue.app
                   </div>
                 </div>
               </div>
@@ -263,9 +261,12 @@ function HeroSection() {
                     {/* Detected Verses Queue */}
                     <div className="space-y-2">
                       <p className="text-xs text-verse-muted uppercase tracking-wide">Detected</p>
-                      {["Romans 8:28", "John 3:16", "Psalm 23:1"].map((verse, i) => (
+                      {["Luke 15:11–32", "John 4:1–26", "Ephesians 6:10–18"].map((verse, i) => (
                         <div key={verse} className={`p-3 rounded-lg border ${i === 0 ? "bg-gold-500/10 border-gold-500/30" : "bg-verse-surface border-verse-border"}`}>
                           <p className={`text-sm font-medium ${i === 0 ? "text-gold-400" : "text-verse-text"}`}>{verse}</p>
+                          <p className="text-xs text-verse-muted mt-0.5">
+                            {i === 0 ? "the prodigal son" : i === 1 ? "woman at the well" : "armor of God"}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -274,10 +275,10 @@ function HeroSection() {
                   {/* Right: Display Preview */}
                   <div className="bg-verse-surface rounded-xl border border-verse-border p-6 flex flex-col items-center justify-center text-center">
                     <p className="text-xs text-verse-muted uppercase tracking-wide mb-4">Now Displaying</p>
-                    <p className="font-display text-2xl text-gold-400 mb-3">Romans 8:28</p>
+                    <p className="font-display text-2xl text-gold-400 mb-3">Luke 15:11–32</p>
                     <p className="font-scripture text-lg text-verse-text leading-relaxed">
-                      &ldquo;And we know that in all things God works for the good of those who love him, 
-                      who have been called according to his purpose.&rdquo;
+                      &ldquo;And he said, A certain man had two sons: And the younger of them said to his father, 
+                      Father, give me the portion of goods that falleth to me...&rdquo;
                     </p>
                     <p className="text-sm text-verse-muted mt-4">KJV</p>
                   </div>
@@ -292,11 +293,62 @@ function HeroSection() {
 }
 
 // ============================================
+// Context Understanding Section (NEW)
+// ============================================
+function ContextSection() {
+  const examples = [
+    { phrase: "The prodigal son", reference: "Luke 15:11–32" },
+    { phrase: "The woman at the well", reference: "John 4:1–26" },
+    { phrase: "Armor of God", reference: "Ephesians 6:10–18" },
+    { phrase: "Fruit of the Spirit", reference: "Galatians 5:22–23" },
+  ];
+
+  return (
+    <section className="section-padding bg-verse-surface/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto text-center mb-12">
+          <h2 className="font-display text-3xl lg:text-4xl font-bold text-verse-text mb-4">
+            More Than Chapter and Verse
+          </h2>
+          <p className="text-lg text-verse-muted">
+            VerseCue does not rely on perfect phrasing. It recognizes the moment.
+          </p>
+        </div>
+
+        {/* Examples Grid */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto mb-12">
+          {examples.map((example) => (
+            <div
+              key={example.phrase}
+              className="bg-verse-bg border border-verse-border rounded-xl p-5 text-center premium-card"
+            >
+              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gold-500/10 border border-gold-500/20 mx-auto mb-3">
+                <Quote className="w-4 h-4 text-gold-400" />
+              </div>
+              <p className="text-verse-text font-medium mb-2">&ldquo;{example.phrase}&rdquo;</p>
+              <div className="flex items-center justify-center gap-2 text-sm text-verse-muted">
+                <ArrowRight className="w-3 h-3" />
+                <span className="text-gold-400 font-medium">{example.reference}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Control Message */}
+        <p className="text-center text-verse-muted">
+          You are always in control—nothing appears on screen without your approval.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ============================================
 // Problem/Solution Section
 // ============================================
 function ProblemSolutionSection() {
   return (
-    <section className="section-padding bg-verse-surface/50">
+    <section className="section-padding">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           {/* Problem */}
@@ -305,12 +357,12 @@ function ProblemSolutionSection() {
               The Problem
             </div>
             <h2 className="font-display text-3xl lg:text-4xl font-bold text-verse-text mb-6">
-              Missed Verses, Distracted Congregation
+              The Moment Passes While People Search
             </h2>
             <div className="space-y-4 text-verse-muted">
               <p>
-                Your pastor references a scripture. Half the congregation scrambles to find it on their phones. 
-                The other half gives up and waits. By the time they find it, the moment has passed.
+                When a scripture is referenced mid-message, people either scramble for it—or miss it entirely. 
+                Volunteers try to keep up, but spontaneous preaching moves fast.
               </p>
               <ul className="space-y-3">
                 {[
@@ -334,19 +386,19 @@ function ProblemSolutionSection() {
               The Solution
             </div>
             <h2 className="font-display text-3xl lg:text-4xl font-bold text-verse-text mb-6">
-              Automatic Detection, Instant Display
+              Scripture Appears While the Moment Is Still Happening
             </h2>
             <div className="space-y-4 text-verse-muted">
               <p>
-                VerseCue listens to your sermon and automatically detects every Bible reference—whether 
-                spoken directly or quoted from memory. Verses appear on screen the moment they are mentioned.
+                VerseCue listens in real time, detects scripture naturally, and queues it for one-tap approval. 
+                Your congregation stays focused. Your team stays calm.
               </p>
               <ul className="space-y-3">
                 {[
-                  "AI detects explicit refs: John 3:16, Romans chapter 8",
+                  "Detects explicit references: John 3:16, Romans chapter 8",
                   "Recognizes quotes: For God so loved the world...",
-                  "Understands context: the prodigal son, David and Goliath",
-                  "One-click approval keeps you in control",
+                  "Understands context: the prodigal son, armor of God",
+                  "One-tap approval keeps you in complete control",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3">
                     <Check className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
@@ -370,31 +422,31 @@ function HowItWorksSection() {
     {
       number: "01",
       title: "Start a Session",
-      description: "Open VerseCue on any device. Click start. No complex setup required.",
+      description: "Open VerseCue on your laptop, iPad, or phone. Tap start. You are live in seconds.",
       icon: Play,
     },
     {
       number: "02",
       title: "Speak Naturally",
-      description: "Preach as you always do. VerseCue listens and detects scripture references in real-time.",
+      description: "Preach as you always do. VerseCue listens and detects scripture references in real time.",
       icon: Mic,
     },
     {
       number: "03",
-      title: "Approve & Display",
+      title: "Approve and Display",
       description: "Detected verses queue up for review. One tap sends them to your congregation display.",
       icon: Monitor,
     },
     {
       number: "04",
-      title: "Share & Review",
-      description: "After service, get AI summaries, downloadable transcripts, and shareable sermon notes.",
+      title: "Save and Share",
+      description: "After service, save your session, export notes, and generate a clean summary.",
       icon: FileText,
     },
   ];
 
   return (
-    <section id="how-it-works" className="section-padding">
+    <section id="how-it-works" className="section-padding bg-verse-surface/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
@@ -415,7 +467,7 @@ function HowItWorksSection() {
                 <div className="hidden lg:block absolute top-12 left-full w-full h-px bg-gradient-to-r from-verse-border to-transparent z-0" />
               )}
               
-              <div className="relative bg-verse-surface border border-verse-border rounded-2xl p-6 premium-card">
+              <div className="relative bg-verse-bg border border-verse-border rounded-2xl p-6 premium-card h-full">
                 {/* Number */}
                 <div className="text-5xl font-bold text-verse-border/50 mb-4">{step.number}</div>
                 
@@ -443,48 +495,48 @@ function FeaturesSection() {
   const features = [
     {
       icon: Brain,
-      title: "Three-Layer Detection",
-      description: "Regex parsing, phrase library, and AI combine to catch every reference—explicit or contextual.",
+      title: "Contextual Understanding",
+      description: "Recognizes sermons by meaning—explicit references, quoted phrases, and biblical moments.",
     },
     {
       icon: Zap,
-      title: "Real-Time Processing",
-      description: "Sub-second detection means verses appear on screen the moment they are spoken.",
+      title: "Real-Time Queue",
+      description: "Verses appear as they are mentioned, ready for quick approval.",
     },
     {
       icon: Monitor,
-      title: "Beautiful Display",
-      description: "Clean, distraction-free verse display designed for projection screens and TVs.",
+      title: "Designed for Screens",
+      description: "Clean, high-contrast display built for projectors, TVs, and livestreams.",
+    },
+    {
+      icon: Shield,
+      title: "You Stay in Control",
+      description: "Approve, dismiss, or re-display—instant control without interrupting the flow.",
     },
     {
       icon: FileText,
-      title: "AI Summaries",
-      description: "Get professional sermon summaries with key points, themes, and action items.",
+      title: "Sermon Summaries",
+      description: "Generate a clean recap with key themes and takeaways for your team or congregation.",
     },
     {
       icon: Download,
-      title: "Export Anywhere",
-      description: "Download transcripts and summaries as PDF, Word, or plain text.",
+      title: "Exports and Archives",
+      description: "Save transcripts and notes. Export as PDF or Word when you need them.",
     },
     {
-      icon: Users,
-      title: "Team Collaboration",
-      description: "Multiple operators can manage sessions. Perfect for larger churches.",
+      icon: Tablet,
+      title: "Operator Mode",
+      description: "Run sessions from your laptop, tablet, or phone—touch-friendly controls wherever you are.",
     },
     {
       icon: Globe,
       title: "Multiple Translations",
-      description: "Switch between KJV, WEB, ASV, and more with a single click.",
-    },
-    {
-      icon: Shield,
-      title: "Private & Secure",
-      description: "Your sermons stay yours. We do not store audio—only detected references.",
+      description: "Switch between translations with a single tap. Growing library of versions available.",
     },
   ];
 
   return (
-    <section id="features" className="section-padding bg-verse-surface/50">
+    <section id="features" className="section-padding">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
@@ -501,7 +553,7 @@ function FeaturesSection() {
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="bg-verse-bg border border-verse-border rounded-2xl p-6 premium-card"
+              className="bg-verse-surface border border-verse-border rounded-2xl p-6 premium-card"
             >
               <div className="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center mb-4">
                 <feature.icon className="w-6 h-6 text-gold-400" />
@@ -525,11 +577,11 @@ function PricingSection() {
   const plans = [
     {
       name: "Free",
-      description: "Try VerseCue risk-free",
+      description: "Experience the workflow",
       price: { monthly: 0, annual: 0 },
       features: [
         "3 sessions total",
-        "Basic detection (regex)",
+        "Basic detection",
         "KJV translation",
         "Display screen",
         "VerseCue watermark",
@@ -539,14 +591,15 @@ function PricingSection() {
     },
     {
       name: "Pro",
-      description: "For growing churches",
+      description: "Everything you need for Sundays",
       price: { monthly: 19, annual: 15 },
       features: [
         "Unlimited sessions",
-        "AI-powered detection",
+        "Contextual AI detection",
         "3 translations",
         "AI sermon summaries",
-        "PDF & Word export",
+        "PDF and Word export",
+        "Congregation follow-along",
         "No watermark",
         "Email support",
       ],
@@ -555,16 +608,16 @@ function PricingSection() {
     },
     {
       name: "Church",
-      description: "For larger congregations",
+      description: "Team workflows and member experience",
       price: { monthly: 49, annual: 40 },
       features: [
         "Everything in Pro",
         "Unlimited team members",
-        "All translations",
+        "Expanded translation library",
         "Multiple locations",
-        "Congregation app access",
+        "Full congregation platform",
+        "Broadcasts and announcements",
         "Priority support",
-        "Custom branding",
       ],
       cta: "Contact Sales",
       highlighted: false,
@@ -572,7 +625,7 @@ function PricingSection() {
   ];
 
   return (
-    <section id="pricing" className="section-padding">
+    <section id="pricing" className="section-padding bg-verse-surface/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-12">
@@ -584,7 +637,7 @@ function PricingSection() {
           </p>
           
           {/* Toggle */}
-          <div className="inline-flex items-center gap-4 p-1.5 bg-verse-surface border border-verse-border rounded-xl">
+          <div className="inline-flex items-center gap-4 p-1.5 bg-verse-bg border border-verse-border rounded-xl">
             <button
               onClick={() => setAnnual(false)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -610,10 +663,10 @@ function PricingSection() {
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative rounded-2xl border-2 p-8 transition-all ${
+              className={`relative rounded-2xl border-2 p-8 transition-all flex flex-col ${
                 plan.highlighted
-                  ? "border-gold-500 bg-verse-surface scale-105 shadow-2xl shadow-gold-500/10"
-                  : "border-verse-border bg-verse-surface/50 hover:border-verse-muted"
+                  ? "border-gold-500 bg-verse-bg scale-105 shadow-2xl shadow-gold-500/10"
+                  : "border-verse-border bg-verse-bg hover:border-verse-muted"
               }`}
             >
               {plan.highlighted && (
@@ -640,7 +693,7 @@ function PricingSection() {
                 )}
               </div>
 
-              <ul className="space-y-3 mb-8">
+              <ul className="space-y-3 mb-8 flex-grow">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-3 text-sm text-verse-muted">
                     <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
@@ -650,11 +703,11 @@ function PricingSection() {
               </ul>
 
               <Link
-                href={plan.name === "Church" ? "#contact" : "/signup"}
-                className={`block w-full text-center py-3 rounded-xl font-semibold transition-all ${
+                href={plan.name === "Church" ? "mailto:hello@versecue.app" : "/signup"}
+                className={`block w-full text-center py-3 rounded-xl font-semibold transition-all mt-auto ${
                   plan.highlighted
                     ? "bg-gold-500 text-verse-bg hover:bg-gold-400"
-                    : "bg-verse-bg border border-verse-border text-verse-text hover:bg-verse-elevated"
+                    : "bg-verse-surface border border-verse-border text-verse-text hover:bg-verse-elevated"
                 }`}
               >
                 {plan.cta}
@@ -687,7 +740,7 @@ function TestimonialsSection() {
       church: "Grace Community Church",
     },
     {
-      quote: "We used to miss half the scripture references during sermons. Now every verse appears on screen instantly. It is like having a perfect assistant.",
+      quote: "Last Sunday, I mentioned the woman at the well and the verse was on screen before I finished the sentence. Our media team finally has breathing room.",
       author: "Sarah Mitchell",
       role: "Media Director",
       church: "New Life Fellowship",
@@ -701,7 +754,7 @@ function TestimonialsSection() {
   ];
 
   return (
-    <section className="section-padding bg-verse-surface/50">
+    <section className="section-padding">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
@@ -718,7 +771,7 @@ function TestimonialsSection() {
           {testimonials.map((testimonial, index) => (
             <div
               key={index}
-              className="bg-verse-bg border border-verse-border rounded-2xl p-8 premium-card"
+              className="bg-verse-surface border border-verse-border rounded-2xl p-8 premium-card"
             >
               {/* Stars */}
               <div className="flex gap-1 mb-4">
@@ -752,41 +805,41 @@ function FAQSection() {
 
   const faqs = [
     {
-      question: "How accurate is the scripture detection?",
-      answer: "VerseCue uses a three-layer detection system: regex parsing for explicit references (John 3:16), a phrase library for famous quotes, and AI for contextual references (like the prodigal son). In testing, it catches 95%+ of scripture references with very few false positives."
+      question: "How accurate is the detection?",
+      answer: "VerseCue uses layered detection: regex parsing for explicit references, a phrase library for common quotes, and AI for contextual understanding. You remain in control—nothing is displayed without your approval."
     },
     {
       question: "What equipment do I need?",
-      answer: "Just a computer or tablet with a microphone and internet connection. VerseCue works in your browser—no special software to install. For the display, you can use any screen connected to a computer, or open the display URL on a dedicated device."
+      answer: "Any laptop, tablet, or phone with a microphone and internet connection. VerseCue works in your browser—no special software to install. Many churches use the same audio environment they already have."
     },
     {
-      question: "Can I use my own microphone?",
-      answer: "Yes! VerseCue works with any microphone your device recognizes. For best results in larger venues, we recommend using a lapel mic or the same audio feed that goes to your sound system."
+      question: "Do you store my sermon audio?",
+      answer: "VerseCue processes audio live and does not store raw recordings. If you choose to save a session, we store your session notes and generated text outputs only."
     },
     {
       question: "What Bible translations are supported?",
-      answer: "The free tier includes KJV. Pro plans add WEB and ASV. Church plans include all available translations. We are constantly adding more based on user requests."
+      answer: "We support a growing library of translations. The free tier includes KJV. Pro plans add additional translations, and Church plans include our expanded library. Availability varies by licensing."
     },
     {
-      question: "Is my sermon data private?",
-      answer: "Absolutely. We do not store audio recordings—only the detected scripture references and your session notes. Your sermon content stays on your device. All data is encrypted in transit and at rest."
+      question: "Can I run VerseCue from an iPad?",
+      answer: "Yes. Operator Mode works on laptops, tablets, and phones with touch-friendly controls. Many churches run sessions from an iPad at the sound booth or front row."
     },
     {
       question: "Can multiple people operate VerseCue during a service?",
-      answer: "Yes! Church plan subscribers can add unlimited team members. This is perfect for having one person approve verses while another manages the display, or for training new volunteers."
+      answer: "Yes. Church plan subscribers can add unlimited team members. This is perfect for having one person approve verses while another manages the display."
     },
     {
       question: "What happens if I exceed my session limit?",
-      answer: "On the free tier, after 3 sessions you will be prompted to upgrade. We will not cut you off mid-sermon—your current session will always complete. You can upgrade anytime to continue."
+      answer: "On the free tier, after 3 sessions you will be prompted to upgrade. We will never cut you off mid-sermon—your current session will always complete."
     },
     {
       question: "Do you offer discounts for small churches?",
-      answer: "Yes! We offer special pricing for churches under 100 members and for churches in developing nations. Contact us at hello@versecue.app to discuss your situation."
+      answer: "Yes. We offer special pricing for churches under 100 members and for churches in developing nations. Contact us at hello@versecue.app to discuss your situation."
     },
   ];
 
   return (
-    <section id="faq" className="section-padding">
+    <section id="faq" className="section-padding bg-verse-surface/50">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
@@ -807,7 +860,7 @@ function FAQSection() {
             >
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full flex items-center justify-between p-5 text-left bg-verse-surface hover:bg-verse-elevated transition-colors"
+                className="w-full flex items-center justify-between p-5 text-left bg-verse-bg hover:bg-verse-elevated transition-colors"
               >
                 <span className="font-medium text-verse-text pr-4">{faq.question}</span>
                 <ChevronDown
@@ -817,7 +870,7 @@ function FAQSection() {
                 />
               </button>
               {openIndex === index && (
-                <div className="px-5 pb-5 bg-verse-surface">
+                <div className="px-5 pb-5 bg-verse-bg">
                   <p className="text-verse-muted leading-relaxed">{faq.answer}</p>
                 </div>
               )}
@@ -845,9 +898,11 @@ function CTASection() {
             <h2 className="font-display text-3xl lg:text-4xl font-bold text-verse-text mb-4">
               Ready to Transform Your Services?
             </h2>
-            <p className="text-lg text-verse-muted mb-8">
-              Join churches already using VerseCue to engage their congregations with scripture. 
-              Start your free trial today—no credit card required.
+            <p className="text-lg text-verse-muted mb-3">
+              Join churches already using VerseCue to engage their congregations with scripture.
+            </p>
+            <p className="text-verse-muted mb-8">
+              Be fully present in worship. We have got you.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -900,10 +955,14 @@ function Footer() {
           <div>
             <h4 className="font-semibold text-verse-text mb-4">Product</h4>
             <ul className="space-y-2">
-              {["Features", "Pricing", "FAQ", "Changelog"].map((link) => (
-                <li key={link}>
-                  <a href={`#${link.toLowerCase()}`} className="text-verse-muted hover:text-verse-text transition-colors text-sm">
-                    {link}
+              {[
+                { label: "Features", href: "#features" },
+                { label: "Pricing", href: "#pricing" },
+                { label: "FAQ", href: "#faq" },
+              ].map((link) => (
+                <li key={link.label}>
+                  <a href={link.href} className="text-verse-muted hover:text-verse-text transition-colors text-sm">
+                    {link.label}
                   </a>
                 </li>
               ))}
@@ -914,10 +973,9 @@ function Footer() {
             <h4 className="font-semibold text-verse-text mb-4">Support</h4>
             <ul className="space-y-2">
               {[
-                { label: "Help Center", href: "#" },
                 { label: "Contact Us", href: "mailto:hello@versecue.app" },
-                { label: "Privacy Policy", href: "#" },
-                { label: "Terms of Service", href: "#" },
+                { label: "Privacy Policy", href: "/privacy" },
+                { label: "Terms of Service", href: "/terms" },
               ].map((link) => (
                 <li key={link.label}>
                   <a href={link.href} className="text-verse-muted hover:text-verse-text transition-colors text-sm">
@@ -936,7 +994,7 @@ function Footer() {
           </p>
           <div className="flex items-center gap-2 text-sm text-verse-subtle">
             <Shield className="w-4 h-4" />
-            <span>Your data is encrypted and secure</span>
+            <span>Private by design. Your data is encrypted and secure.</span>
           </div>
         </div>
       </div>
@@ -952,6 +1010,7 @@ export default function LandingPage() {
     <main className="min-h-screen bg-verse-bg">
       <Navigation />
       <HeroSection />
+      <ContextSection />
       <ProblemSolutionSection />
       <HowItWorksSection />
       <FeaturesSection />

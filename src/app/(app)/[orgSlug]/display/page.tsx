@@ -95,9 +95,11 @@ interface DisplaySettings {
   verse_italic: boolean;
   text_outline: boolean;
   text_outline_color: string;
+  text_outline_width: number;
   text_shadow: boolean;
   min_font_size: number;
   auto_scale_enabled: boolean;
+  split_word_threshold: number;
   reference_font_size: number;
   reference_color: string;
   reference_position: string;
@@ -130,9 +132,11 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   verse_italic: false,
   text_outline: false,
   text_outline_color: '#000000',
+  text_outline_width: 1,
   text_shadow: true,
   min_font_size: 28,
   auto_scale_enabled: true,
+  split_word_threshold: 70,
   reference_font_size: 56,
   reference_color: '#fbbf24',
   reference_position: 'top',
@@ -459,9 +463,11 @@ export default function DisplaySettingsPage() {
           verse_italic: data.verse_italic ?? DEFAULT_SETTINGS.verse_italic,
           text_outline: data.text_outline ?? DEFAULT_SETTINGS.text_outline,
           text_outline_color: data.text_outline_color ?? DEFAULT_SETTINGS.text_outline_color,
+          text_outline_width: data.text_outline_width ?? DEFAULT_SETTINGS.text_outline_width,
           text_shadow: data.text_shadow ?? DEFAULT_SETTINGS.text_shadow,
           min_font_size: data.min_font_size ?? DEFAULT_SETTINGS.min_font_size,
           auto_scale_enabled: data.auto_scale_enabled ?? DEFAULT_SETTINGS.auto_scale_enabled,
+          split_word_threshold: data.split_word_threshold ?? DEFAULT_SETTINGS.split_word_threshold,
           reference_font_size: data.reference_font_size ?? DEFAULT_SETTINGS.reference_font_size,
           reference_color: data.reference_color ?? DEFAULT_SETTINGS.reference_color,
           reference_position: data.reference_position ?? DEFAULT_SETTINGS.reference_position,
@@ -721,6 +727,19 @@ export default function DisplaySettingsPage() {
                   <p className="text-xs text-verse-muted mt-1">Long verses will scale down to this minimum before splitting</p>
                 </div>
                 <div>
+                  <label className="block text-sm text-verse-muted mb-2">Split Threshold: {settings.split_word_threshold} words</label>
+                  <input
+                    type="range"
+                    min="30"
+                    max="120"
+                    step="5"
+                    value={settings.split_word_threshold}
+                    onChange={(e) => updateSetting('split_word_threshold', parseInt(e.target.value))}
+                    className="w-full accent-gold-500"
+                  />
+                  <p className="text-xs text-verse-muted mt-1">Verses longer than this will split into multiple parts</p>
+                </div>
+                <div>
                   <label className="block text-sm text-verse-muted mb-2">Font</label>
                   <select
                     value={settings.verse_font_family}
@@ -802,11 +821,24 @@ export default function DisplaySettingsPage() {
                       </button>
                     </div>
                     {settings.text_outline && (
-                      <ColorPicker
-                        label="Outline Color"
-                        value={settings.text_outline_color}
-                        onChange={(val) => updateSetting('text_outline_color', val)}
-                      />
+                      <>
+                        <div>
+                          <label className="block text-sm text-verse-muted mb-2">Outline Width: {settings.text_outline_width}px</label>
+                          <input
+                            type="range"
+                            min="1"
+                            max="4"
+                            value={settings.text_outline_width}
+                            onChange={(e) => updateSetting('text_outline_width', parseInt(e.target.value))}
+                            className="w-full accent-gold-500"
+                          />
+                        </div>
+                        <ColorPicker
+                          label="Outline Color"
+                          value={settings.text_outline_color}
+                          onChange={(val) => updateSetting('text_outline_color', val)}
+                        />
+                      </>
                     )}
                   </div>
                 </div>
@@ -1171,7 +1203,7 @@ export default function DisplaySettingsPage() {
                       fontWeight: settings.verse_bold ? 'bold' : 'normal',
                       fontStyle: settings.verse_italic ? 'italic' : 'normal',
                       textShadow: settings.text_shadow ? '1px 1px 2px rgba(0,0,0,0.5)' : 'none',
-                      WebkitTextStroke: settings.text_outline ? `0.5px ${settings.text_outline_color}` : undefined,
+                      WebkitTextStroke: settings.text_outline ? `${settings.text_outline_width * 0.3}px ${settings.text_outline_color}` : undefined,
                       textAlign: settings.text_align as any,
                     }}
                   >

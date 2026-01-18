@@ -21,9 +21,11 @@ interface DisplaySettings {
   verse_italic: boolean;
   text_outline: boolean;
   text_outline_color: string;
+  text_outline_width: number;
   text_shadow: boolean;
   min_font_size: number;
   auto_scale_enabled: boolean;
+  split_word_threshold: number;
   reference_font_size: number;
   reference_color: string;
   reference_position: string;
@@ -55,9 +57,11 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   verse_italic: false,
   text_outline: false,
   text_outline_color: '#000000',
+  text_outline_width: 1,
   text_shadow: true,
   min_font_size: 28,
   auto_scale_enabled: true,
+  split_word_threshold: 70,
   reference_font_size: 56,
   reference_color: '#fbbf24',
   reference_position: 'top',
@@ -115,18 +119,18 @@ function calculateFontSize(
   return minFontSize;
 }
 
-function splitVerse(text: string, minFontSize: number): VersePart[] {
+function splitVerse(text: string, threshold: number): VersePart[] {
   const wordCount = countWords(text);
   
-  // Don't split if under threshold (even at min font, these should fit)
-  if (wordCount <= 100) {
+  // Don't split if under threshold
+  if (wordCount <= threshold) {
     return [{ text, partNumber: 1, totalParts: 1 }];
   }
   
-  // Determine number of parts needed
-  let numParts = 2;
-  if (wordCount > 180) numParts = 3;
-  if (wordCount > 270) numParts = 4;
+  // Determine number of parts needed based on threshold
+  const wordsPerPart = Math.min(threshold, 70); // Cap at 70 words per part
+  let numParts = Math.ceil(wordCount / wordsPerPart);
+  numParts = Math.min(numParts, 5); // Max 5 parts
   
   // Split at sentence boundaries preferably
   const sentences = text.split(/(?<=[.;!?])\s+/);
@@ -150,10 +154,10 @@ function splitVerse(text: string, minFontSize: number): VersePart[] {
   } else {
     // Fall back to word-based splitting
     const words = text.split(/\s+/);
-    const wordsPerPart = Math.ceil(words.length / numParts);
+    const actualWordsPerPart = Math.ceil(words.length / numParts);
     for (let i = 0; i < numParts; i++) {
-      const start = i * wordsPerPart;
-      const end = Math.min(start + wordsPerPart, words.length);
+      const start = i * actualWordsPerPart;
+      const end = Math.min(start + actualWordsPerPart, words.length);
       const partText = words.slice(start, end).join(' ').trim();
       if (partText) {
         parts.push({
@@ -185,7 +189,7 @@ function getTextStyles(settings: DisplaySettings): React.CSSProperties {
   }
   
   if (settings.text_outline) {
-    styles.WebkitTextStroke = `1px ${settings.text_outline_color}`;
+    styles.WebkitTextStroke = `${settings.text_outline_width}px ${settings.text_outline_color}`;
     styles.paintOrder = 'stroke fill';
   }
   
@@ -250,9 +254,11 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             verse_italic: settingsData.verse_italic ?? DEFAULT_SETTINGS.verse_italic,
             text_outline: settingsData.text_outline ?? DEFAULT_SETTINGS.text_outline,
             text_outline_color: settingsData.text_outline_color ?? DEFAULT_SETTINGS.text_outline_color,
+            text_outline_width: settingsData.text_outline_width ?? DEFAULT_SETTINGS.text_outline_width,
             text_shadow: settingsData.text_shadow ?? DEFAULT_SETTINGS.text_shadow,
             min_font_size: settingsData.min_font_size ?? DEFAULT_SETTINGS.min_font_size,
             auto_scale_enabled: settingsData.auto_scale_enabled ?? DEFAULT_SETTINGS.auto_scale_enabled,
+            split_word_threshold: settingsData.split_word_threshold ?? DEFAULT_SETTINGS.split_word_threshold,
             reference_font_size: settingsData.reference_font_size ?? DEFAULT_SETTINGS.reference_font_size,
             reference_color: settingsData.reference_color ?? DEFAULT_SETTINGS.reference_color,
             reference_position: settingsData.reference_position ?? DEFAULT_SETTINGS.reference_position,
@@ -372,7 +378,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
 
       {display?.reference ? (
         <div 
-          className="w-full max-w-6xl mx-auto"
+          className="w-full"
           style={{ textAlign: settings.text_align as any }}
         >
           {/* Reference - Top */}
@@ -393,7 +399,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
 
           {/* Verse Text with Auto-scaling */}
           {display.verse_text && (() => {
-            const parts = splitVerse(display.verse_text, settings.min_font_size);
+            const parts = splitVerse(display.verse_text, settings.split_word_threshold);
             const fontSize = calculateFontSize(
               display.verse_text,
               settings.verse_font_size,
@@ -419,17 +425,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
                 >
                   "{currentPart.text}"
                 </p>
-                {showPartIndicator && (
-                  <p 
-                    className="mt-4 text-center opacity-60"
-                    style={{ 
-                      color: settings.translation_color,
-                      fontSize: settings.translation_font_size,
-                    }}
-                  >
-                    Part {currentPart.partNumber} of {currentPart.totalParts}
-                  </p>
-                )}
+{/* Part indicator removed - shown only in operator control panel */}
               </div>
             );
           })()}

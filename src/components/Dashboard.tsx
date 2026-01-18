@@ -405,7 +405,7 @@ function NeedsReview({ className }: { className?: string }) {
 // ============================================
 // Ready to Display - Full Column, Newest First
 // ============================================
-function ReadyToDisplay({ className }: { className?: string }) {
+function ReadyToDisplay({ className, splitThreshold = 70 }: { className?: string; splitThreshold?: number }) {
   const approvedQueue = useSessionStore((s) => s.approvedQueue);
   const displayScripture = useSessionStore((s) => s.displayScripture);
   const redisplayScripture = useSessionStore((s) => s.redisplayScripture);
@@ -472,7 +472,7 @@ function ReadyToDisplay({ className }: { className?: string }) {
                 
                 <div className="flex items-center justify-between">
                   <button 
-                    onClick={() => item.displayedAt ? redisplayScripture(item.id) : displayScripture(item.id)} 
+                    onClick={() => item.displayedAt ? redisplayScripture(item.id, splitThreshold) : displayScripture(item.id, splitThreshold)} 
                     className={cn(
                       'flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all',
                       item.displayedAt 
@@ -498,7 +498,7 @@ function ReadyToDisplay({ className }: { className?: string }) {
 // ============================================
 // Display Preview
 // ============================================
-function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
+function DisplayPreview({ orgSlug, splitThreshold = 70 }: { orgSlug?: string; splitThreshold?: number }) {
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
   const clearDisplay = useSessionStore((s) => s.clearDisplay);
   const goToNextVerse = useSessionStore((s) => s.goToNextVerse);
@@ -563,11 +563,11 @@ function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
             {currentDisplay.translation && <span className="mt-2 text-[10px] text-verse-muted uppercase">— {currentDisplay.translation} —</span>}
             
             <div className="flex items-center gap-2 mt-3">
-              <button onClick={() => goToPrevVerse()} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Previous verse">
+              <button onClick={() => goToPrevVerse(splitThreshold)} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Previous verse">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-[10px] text-verse-subtle">Verse</span>
-              <button onClick={() => goToNextVerse()} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Next verse">
+              <button onClick={() => goToNextVerse(splitThreshold)} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Next verse">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -797,6 +797,43 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
     }
   }, [isListening, settings.speechProvider]);
 
+  // Fetch split threshold from display settings
+  const [splitThreshold, setSplitThreshold] = useState(70);
+  
+  useEffect(() => {
+    const fetchThreshold = async () => {
+      console.log('[Threshold] orgSlug:', orgSlug);
+      if (!orgSlug) {
+        console.log('[Threshold] No orgSlug, skipping fetch');
+        return;
+      }
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('slug', orgSlug)
+        .single();
+      
+      console.log('[Threshold] Org found:', org);
+      
+      if (org) {
+        const { data: settings } = await supabase
+          .from('display_settings')
+          .select('split_word_threshold')
+          .eq('organization_id', org.id)
+          .single();
+        
+        console.log('[Threshold] Settings:', settings);
+        
+        if (settings?.split_word_threshold) {
+          console.log('[Threshold] Setting to:', settings.split_word_threshold);
+          setSplitThreshold(settings.split_word_threshold);
+        }
+      }
+    };
+    fetchThreshold();
+  }, [orgSlug]);
+  
   // Broadcast display changes to Supabase for remote display
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
   const currentPart = useSessionStore((s) => s.currentPart);
@@ -937,12 +974,12 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
           
           {/* Middle Column: Ready to Display (full height) */}
           <div className="col-span-12 lg:col-span-4">
-            <ReadyToDisplay className="h-full max-h-[calc(100vh-250px)] overflow-y-auto" />
+            <ReadyToDisplay className="h-full max-h-[calc(100vh-250px)] overflow-y-auto" splitThreshold={splitThreshold} />
           </div>
           
           {/* Right Column: Display + Translation + Stats + Log */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
-            <DisplayPreview orgSlug={orgSlug} />
+            <DisplayPreview orgSlug={orgSlug} splitThreshold={splitThreshold} />
             <TranslationSelector />
             <SessionStats />
             <SessionLog />

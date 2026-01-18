@@ -57,8 +57,8 @@ interface SessionState {
   dismissDetection: (id: string) => void;
   removeFromApproved: (id: string) => void;
   
-  displayScripture: (id: string) => void;
-  redisplayScripture: (id: string) => void;
+  displayScripture: (id: string, splitThreshold?: number) => void;
+  redisplayScripture: (id: string, splitThreshold?: number) => void;
   clearDisplay: () => void;
   goToNextVerse: (splitThreshold?: number) => void;
   goToPrevVerse: (splitThreshold?: number) => void;
@@ -89,43 +89,61 @@ const DEFAULT_STATS: SessionStats = {
 
 // Split verse helper - threshold = max words per part before splitting
 function splitVerseText(text: string, maxWordsPerPart: number = 70): string[] {
+  console.log('[Split] Called with threshold:', maxWordsPerPart);
   const words = text.trim().split(/\s+/);
   const wordCount = words.length;
+  console.log('[Split] Word count:', wordCount);
   
   // Don't split if under threshold
   if (wordCount <= maxWordsPerPart) {
+    console.log('[Split] No split needed');
     return [text];
   }
   
   // Calculate how many parts we need
-  // Each part should have at most maxWordsPerPart words
   let numParts = Math.ceil(wordCount / maxWordsPerPart);
   numParts = Math.min(numParts, 5); // Max 5 parts
   
-  // Calculate actual words per part (distribute evenly)
-  const actualWordsPerPart = Math.ceil(wordCount / numParts);
+  // Calculate target words per part (distribute evenly)
+  const targetWordsPerPart = Math.ceil(wordCount / numParts);
   
-  // Try to split at sentence boundaries first
+  // Try sentence-based splitting first
   const sentences = text.split(/(?<=[.;!?])\s+/);
-  const parts: string[] = [];
   
   if (sentences.length >= numParts) {
-    // Distribute sentences across parts
+    // Try to distribute sentences evenly
+    const sentenceParts: string[] = [];
     const sentencesPerPart = Math.ceil(sentences.length / numParts);
+    
     for (let i = 0; i < numParts; i++) {
       const start = i * sentencesPerPart;
       const end = Math.min(start + sentencesPerPart, sentences.length);
       const partText = sentences.slice(start, end).join(' ').trim();
-      if (partText) parts.push(partText);
+      if (partText) sentenceParts.push(partText);
     }
-  } else {
-    // Fall back to word-based splitting
-    for (let i = 0; i < numParts; i++) {
-      const start = i * actualWordsPerPart;
-      const end = Math.min(start + actualWordsPerPart, words.length);
-      const partText = words.slice(start, end).join(' ').trim();
-      if (partText) parts.push(partText);
+    
+    // Check if parts are reasonably balanced (no part less than 60% of average)
+    const avgWords = wordCount / sentenceParts.length;
+    const minAcceptable = avgWords * 0.6;
+    console.log('[Split] Balance check: avg=', avgWords, 'min acceptable=', minAcceptable);
+    console.log('[Split] Part sizes:', sentenceParts.map(p => p.split(/\s+/).length));
+    const isBalanced = sentenceParts.every(part => 
+      part.split(/\s+/).length >= minAcceptable
+    );
+    
+    if (isBalanced) {
+      return sentenceParts;
     }
+    // If not balanced, fall through to word-based splitting
+  }
+  
+  // Word-based splitting (guaranteed even distribution)
+  const parts: string[] = [];
+  for (let i = 0; i < numParts; i++) {
+    const start = i * targetWordsPerPart;
+    const end = Math.min(start + targetWordsPerPart, words.length);
+    const partText = words.slice(start, end).join(' ').trim();
+    if (partText) parts.push(partText);
   }
   
   return parts.length > 0 ? parts : [text];
@@ -222,6 +240,7 @@ export const useSessionStore = create<SessionState>()(
       })),
       
       displayScripture: (id, splitThreshold = 70) => set((state) => {
+        console.log('[displayScripture] Called with threshold:', splitThreshold);
         const item = state.approvedQueue.find((q) => q.id === id);
         if (!item) return state;
         
@@ -229,7 +248,9 @@ export const useSessionStore = create<SessionState>()(
         
         // Calculate verse parts
         const fullText = item.verseText || '';
+        console.log('[displayScripture] Verse length:', fullText.split(/\s+/).length, 'words');
         const parts = splitVerseText(fullText, splitThreshold);
+        console.log('[displayScripture] Split into', parts.length, 'parts');
         
         return {
           currentDisplay: updatedItem,

@@ -91,6 +91,13 @@ interface DisplaySettings {
   verse_font_size: number;
   verse_font_family: string;
   verse_color: string;
+  verse_bold: boolean;
+  verse_italic: boolean;
+  text_outline: boolean;
+  text_outline_color: string;
+  text_shadow: boolean;
+  min_font_size: number;
+  auto_scale_enabled: boolean;
   reference_font_size: number;
   reference_color: string;
   reference_position: string;
@@ -103,6 +110,11 @@ interface DisplaySettings {
   text_align: string;
   vertical_align: string;
   padding: number;
+  padding_top: number | null;
+  padding_bottom: number | null;
+  padding_left: number | null;
+  padding_right: number | null;
+  padding_advanced: boolean;
   logo_url: string | null;
   logo_position: string;
   logo_size: number;
@@ -114,6 +126,13 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   verse_font_size: 42,
   verse_font_family: 'serif',
   verse_color: '#ffffff',
+  verse_bold: false,
+  verse_italic: false,
+  text_outline: false,
+  text_outline_color: '#000000',
+  text_shadow: true,
+  min_font_size: 28,
+  auto_scale_enabled: true,
   reference_font_size: 56,
   reference_color: '#fbbf24',
   reference_position: 'top',
@@ -126,6 +145,11 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   text_align: 'center',
   vertical_align: 'center',
   padding: 48,
+  padding_top: null,
+  padding_bottom: null,
+  padding_left: null,
+  padding_right: null,
+  padding_advanced: false,
   logo_url: null,
   logo_position: 'none',
   logo_size: 80,
@@ -431,6 +455,13 @@ export default function DisplaySettingsPage() {
           verse_font_size: data.verse_font_size ?? DEFAULT_SETTINGS.verse_font_size,
           verse_font_family: data.verse_font_family ?? DEFAULT_SETTINGS.verse_font_family,
           verse_color: data.verse_color ?? DEFAULT_SETTINGS.verse_color,
+          verse_bold: data.verse_bold ?? DEFAULT_SETTINGS.verse_bold,
+          verse_italic: data.verse_italic ?? DEFAULT_SETTINGS.verse_italic,
+          text_outline: data.text_outline ?? DEFAULT_SETTINGS.text_outline,
+          text_outline_color: data.text_outline_color ?? DEFAULT_SETTINGS.text_outline_color,
+          text_shadow: data.text_shadow ?? DEFAULT_SETTINGS.text_shadow,
+          min_font_size: data.min_font_size ?? DEFAULT_SETTINGS.min_font_size,
+          auto_scale_enabled: data.auto_scale_enabled ?? DEFAULT_SETTINGS.auto_scale_enabled,
           reference_font_size: data.reference_font_size ?? DEFAULT_SETTINGS.reference_font_size,
           reference_color: data.reference_color ?? DEFAULT_SETTINGS.reference_color,
           reference_position: data.reference_position ?? DEFAULT_SETTINGS.reference_position,
@@ -443,6 +474,11 @@ export default function DisplaySettingsPage() {
           text_align: data.text_align ?? DEFAULT_SETTINGS.text_align,
           vertical_align: data.vertical_align ?? DEFAULT_SETTINGS.vertical_align,
           padding: data.padding ?? DEFAULT_SETTINGS.padding,
+          padding_top: data.padding_top ?? DEFAULT_SETTINGS.padding_top,
+          padding_bottom: data.padding_bottom ?? DEFAULT_SETTINGS.padding_bottom,
+          padding_left: data.padding_left ?? DEFAULT_SETTINGS.padding_left,
+          padding_right: data.padding_right ?? DEFAULT_SETTINGS.padding_right,
+          padding_advanced: data.padding_advanced ?? DEFAULT_SETTINGS.padding_advanced,
           logo_url: data.logo_url,
           logo_position: data.logo_position ?? DEFAULT_SETTINGS.logo_position,
           logo_size: data.logo_size ?? DEFAULT_SETTINGS.logo_size,
@@ -673,6 +709,18 @@ export default function DisplaySettingsPage() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm text-verse-muted mb-2">Minimum Size (for auto-scaling): {settings.min_font_size}px</label>
+                  <input
+                    type="range"
+                    min="20"
+                    max="40"
+                    value={settings.min_font_size}
+                    onChange={(e) => updateSetting('min_font_size', parseInt(e.target.value))}
+                    className="w-full accent-gold-500"
+                  />
+                  <p className="text-xs text-verse-muted mt-1">Long verses will scale down to this minimum before splitting</p>
+                </div>
+                <div>
                   <label className="block text-sm text-verse-muted mb-2">Font</label>
                   <select
                     value={settings.verse_font_family}
@@ -689,6 +737,99 @@ export default function DisplaySettingsPage() {
                   value={settings.verse_color}
                   onChange={(val) => updateSetting('verse_color', val)}
                 />
+                
+                {/* Text Styles */}
+                <div className="pt-2 border-t border-verse-border">
+                  <label className="block text-sm text-verse-muted mb-3">Text Styles</label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => updateSetting('verse_bold', !settings.verse_bold)}
+                      className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all text-sm font-bold ${
+                        settings.verse_bold
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-400'
+                          : 'border-verse-border text-verse-muted hover:border-verse-muted'
+                      }`}
+                    >
+                      Bold
+                    </button>
+                    <button
+                      onClick={() => updateSetting('verse_italic', !settings.verse_italic)}
+                      className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all text-sm italic ${
+                        settings.verse_italic
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-400'
+                          : 'border-verse-border text-verse-muted hover:border-verse-muted'
+                      }`}
+                    >
+                      Italic
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Text Effects */}
+                <div className="pt-2 border-t border-verse-border">
+                  <label className="block text-sm text-verse-muted mb-3">Text Effects</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-verse-text">Text Shadow</span>
+                        <p className="text-xs text-verse-muted">Adds depth, good for readability</p>
+                      </div>
+                      <button
+                        onClick={() => updateSetting('text_shadow', !settings.text_shadow)}
+                        className={`w-11 h-6 rounded-full transition-colors ${
+                          settings.text_shadow ? 'bg-gold-500' : 'bg-verse-border'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                          settings.text_shadow ? 'translate-x-5' : 'translate-x-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-verse-text">Text Outline</span>
+                        <p className="text-xs text-verse-muted">Best for busy backgrounds</p>
+                      </div>
+                      <button
+                        onClick={() => updateSetting('text_outline', !settings.text_outline)}
+                        className={`w-11 h-6 rounded-full transition-colors ${
+                          settings.text_outline ? 'bg-gold-500' : 'bg-verse-border'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                          settings.text_outline ? 'translate-x-5' : 'translate-x-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                    {settings.text_outline && (
+                      <ColorPicker
+                        label="Outline Color"
+                        value={settings.text_outline_color}
+                        onChange={(val) => updateSetting('text_outline_color', val)}
+                      />
+                    )}
+                  </div>
+                </div>
+                
+                {/* Auto-scale toggle */}
+                <div className="pt-2 border-t border-verse-border">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm text-verse-text">Auto-scale Long Verses</span>
+                      <p className="text-xs text-verse-muted">Automatically reduce font for long verses</p>
+                    </div>
+                    <button
+                      onClick={() => updateSetting('auto_scale_enabled', !settings.auto_scale_enabled)}
+                      className={`w-11 h-6 rounded-full transition-colors ${
+                        settings.auto_scale_enabled ? 'bg-gold-500' : 'bg-verse-border'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                        settings.auto_scale_enabled ? 'translate-x-5' : 'translate-x-0.5'
+                      }`} />
+                    </button>
+                  </div>
+                </div>
               </div>
             </Section>
 
@@ -827,13 +968,13 @@ export default function DisplaySettingsPage() {
             <Section title="Layout" icon={Layout} defaultOpen={false}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Horizontal</label>
-                  <div className="flex gap-2">
-                    {['left', 'center', 'right'].map((align) => (
+                  <label className="block text-sm text-verse-muted mb-2">Horizontal Alignment</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['left', 'center', 'right', 'justify'].map((align) => (
                       <button
                         key={align}
                         onClick={() => updateSetting('text_align', align)}
-                        className={`flex-1 py-2 px-3 rounded-xl border-2 transition-all capitalize text-sm ${
+                        className={`py-2 px-3 rounded-xl border-2 transition-all capitalize text-sm ${
                           settings.text_align === align
                             ? 'border-gold-500 bg-gold-500/10 text-gold-400'
                             : 'border-verse-border text-verse-muted hover:border-verse-muted'
@@ -845,7 +986,7 @@ export default function DisplaySettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-verse-muted mb-2">Vertical</label>
+                  <label className="block text-sm text-verse-muted mb-2">Vertical Alignment</label>
                   <div className="flex gap-2">
                     {[
                       { value: 'top', label: 'Top' },
@@ -866,16 +1007,80 @@ export default function DisplaySettingsPage() {
                     ))}
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm text-verse-muted mb-2">Padding: {settings.padding}px</label>
-                  <input
-                    type="range"
-                    min="16"
-                    max="128"
-                    value={settings.padding}
-                    onChange={(e) => updateSetting('padding', parseInt(e.target.value))}
-                    className="w-full accent-gold-500"
-                  />
+                
+                {/* Padding Controls */}
+                <div className="pt-2 border-t border-verse-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm text-verse-muted">Content Padding</label>
+                    <button
+                      onClick={() => updateSetting('padding_advanced', !settings.padding_advanced)}
+                      className="text-xs text-gold-400 hover:text-gold-300"
+                    >
+                      {settings.padding_advanced ? '← Simple' : 'Advanced →'}
+                    </button>
+                  </div>
+                  
+                  {!settings.padding_advanced ? (
+                    <div>
+                      <label className="block text-xs text-verse-muted mb-1">All Sides: {settings.padding}px</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="128"
+                        value={settings.padding}
+                        onChange={(e) => updateSetting('padding', parseInt(e.target.value))}
+                        className="w-full accent-gold-500"
+                      />
+                      <p className="text-xs text-verse-muted mt-1">Set to 0 to fill the screen</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-verse-muted mb-1">Top: {settings.padding_top ?? settings.padding}px</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="128"
+                          value={settings.padding_top ?? settings.padding}
+                          onChange={(e) => updateSetting('padding_top', parseInt(e.target.value))}
+                          className="w-full accent-gold-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-verse-muted mb-1">Bottom: {settings.padding_bottom ?? settings.padding}px</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="128"
+                          value={settings.padding_bottom ?? settings.padding}
+                          onChange={(e) => updateSetting('padding_bottom', parseInt(e.target.value))}
+                          className="w-full accent-gold-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-verse-muted mb-1">Left: {settings.padding_left ?? settings.padding}px</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="128"
+                          value={settings.padding_left ?? settings.padding}
+                          onChange={(e) => updateSetting('padding_left', parseInt(e.target.value))}
+                          className="w-full accent-gold-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-verse-muted mb-1">Right: {settings.padding_right ?? settings.padding}px</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="128"
+                          value={settings.padding_right ?? settings.padding}
+                          onChange={(e) => updateSetting('padding_right', parseInt(e.target.value))}
+                          className="w-full accent-gold-500"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </Section>
@@ -963,6 +1168,11 @@ export default function DisplaySettingsPage() {
                     style={{ 
                       fontSize: settings.verse_font_size / 3,
                       color: settings.verse_color,
+                      fontWeight: settings.verse_bold ? 'bold' : 'normal',
+                      fontStyle: settings.verse_italic ? 'italic' : 'normal',
+                      textShadow: settings.text_shadow ? '1px 1px 2px rgba(0,0,0,0.5)' : 'none',
+                      WebkitTextStroke: settings.text_outline ? `0.5px ${settings.text_outline_color}` : undefined,
+                      textAlign: settings.text_align as any,
                     }}
                   >
                     "For God so loved the world, that he gave his only begotten Son..."

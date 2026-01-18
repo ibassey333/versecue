@@ -17,6 +17,13 @@ interface DisplaySettings {
   verse_font_size: number;
   verse_font_family: string;
   verse_color: string;
+  verse_bold: boolean;
+  verse_italic: boolean;
+  text_outline: boolean;
+  text_outline_color: string;
+  text_shadow: boolean;
+  min_font_size: number;
+  auto_scale_enabled: boolean;
   reference_font_size: number;
   reference_color: string;
   reference_position: string;
@@ -29,6 +36,11 @@ interface DisplaySettings {
   text_align: string;
   vertical_align: string;
   padding: number;
+  padding_top: number | null;
+  padding_bottom: number | null;
+  padding_left: number | null;
+  padding_right: number | null;
+  padding_advanced: boolean;
   logo_url: string | null;
   logo_position: string;
   logo_size: number;
@@ -39,6 +51,13 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   verse_font_size: 42,
   verse_font_family: 'serif',
   verse_color: '#ffffff',
+  verse_bold: false,
+  verse_italic: false,
+  text_outline: false,
+  text_outline_color: '#000000',
+  text_shadow: true,
+  min_font_size: 28,
+  auto_scale_enabled: true,
   reference_font_size: 56,
   reference_color: '#fbbf24',
   reference_position: 'top',
@@ -51,11 +70,144 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   text_align: 'center',
   vertical_align: 'center',
   padding: 48,
+  padding_top: null,
+  padding_bottom: null,
+  padding_left: null,
+  padding_right: null,
+  padding_advanced: false,
   logo_url: null,
   logo_position: 'none',
   logo_size: 80,
   show_watermark: true,
 };
+
+// ============================================
+// Long Verse Handling Utilities
+// ============================================
+
+interface VersePart {
+  text: string;
+  partNumber: number;
+  totalParts: number;
+}
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).length;
+}
+
+function calculateFontSize(
+  text: string,
+  baseFontSize: number,
+  minFontSize: number,
+  autoScaleEnabled: boolean
+): number {
+  if (!autoScaleEnabled) return baseFontSize;
+  
+  const wordCount = countWords(text);
+  
+  // Thresholds for scaling
+  if (wordCount <= 40) return baseFontSize;
+  if (wordCount <= 60) return Math.max(minFontSize, baseFontSize * 0.85);
+  if (wordCount <= 80) return Math.max(minFontSize, baseFontSize * 0.75);
+  if (wordCount <= 100) return Math.max(minFontSize, baseFontSize * 0.65);
+  
+  // For very long verses, use minimum
+  return minFontSize;
+}
+
+function splitVerse(text: string, minFontSize: number): VersePart[] {
+  const wordCount = countWords(text);
+  
+  // Don't split if under threshold (even at min font, these should fit)
+  if (wordCount <= 100) {
+    return [{ text, partNumber: 1, totalParts: 1 }];
+  }
+  
+  // Determine number of parts needed
+  let numParts = 2;
+  if (wordCount > 180) numParts = 3;
+  if (wordCount > 270) numParts = 4;
+  
+  // Split at sentence boundaries preferably
+  const sentences = text.split(/(?<=[.;!?])\s+/);
+  const parts: VersePart[] = [];
+  
+  if (sentences.length >= numParts) {
+    // Distribute sentences across parts
+    const sentencesPerPart = Math.ceil(sentences.length / numParts);
+    for (let i = 0; i < numParts; i++) {
+      const start = i * sentencesPerPart;
+      const end = Math.min(start + sentencesPerPart, sentences.length);
+      const partText = sentences.slice(start, end).join(' ').trim();
+      if (partText) {
+        parts.push({
+          text: partText,
+          partNumber: parts.length + 1,
+          totalParts: numParts,
+        });
+      }
+    }
+  } else {
+    // Fall back to word-based splitting
+    const words = text.split(/\s+/);
+    const wordsPerPart = Math.ceil(words.length / numParts);
+    for (let i = 0; i < numParts; i++) {
+      const start = i * wordsPerPart;
+      const end = Math.min(start + wordsPerPart, words.length);
+      const partText = words.slice(start, end).join(' ').trim();
+      if (partText) {
+        parts.push({
+          text: partText,
+          partNumber: parts.length + 1,
+          totalParts: numParts,
+        });
+      }
+    }
+  }
+  
+  // Update totalParts to actual count
+  return parts.map(p => ({ ...p, totalParts: parts.length }));
+}
+
+function getTextStyles(settings: DisplaySettings): React.CSSProperties {
+  const styles: React.CSSProperties = {};
+  
+  if (settings.verse_bold) {
+    styles.fontWeight = 'bold';
+  }
+  
+  if (settings.verse_italic) {
+    styles.fontStyle = 'italic';
+  }
+  
+  if (settings.text_shadow) {
+    styles.textShadow = '2px 2px 4px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.3)';
+  }
+  
+  if (settings.text_outline) {
+    styles.WebkitTextStroke = `1px ${settings.text_outline_color}`;
+    styles.paintOrder = 'stroke fill';
+  }
+  
+  return styles;
+}
+
+function getPadding(settings: DisplaySettings): { top: number; right: number; bottom: number; left: number } {
+  if (settings.padding_advanced) {
+    return {
+      top: settings.padding_top ?? settings.padding,
+      right: settings.padding_right ?? settings.padding,
+      bottom: settings.padding_bottom ?? settings.padding,
+      left: settings.padding_left ?? settings.padding,
+    };
+  }
+  return {
+    top: settings.padding,
+    right: settings.padding,
+    bottom: settings.padding,
+    left: settings.padding,
+  };
+}
 
 export default function DisplayPage({ params }: { params: { orgSlug: string } }) {
   const [display, setDisplay] = useState<DisplayState | null>(null);
@@ -94,6 +246,13 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             verse_font_size: settingsData.verse_font_size ?? DEFAULT_SETTINGS.verse_font_size,
             verse_font_family: settingsData.verse_font_family ?? DEFAULT_SETTINGS.verse_font_family,
             verse_color: settingsData.verse_color ?? DEFAULT_SETTINGS.verse_color,
+            verse_bold: settingsData.verse_bold ?? DEFAULT_SETTINGS.verse_bold,
+            verse_italic: settingsData.verse_italic ?? DEFAULT_SETTINGS.verse_italic,
+            text_outline: settingsData.text_outline ?? DEFAULT_SETTINGS.text_outline,
+            text_outline_color: settingsData.text_outline_color ?? DEFAULT_SETTINGS.text_outline_color,
+            text_shadow: settingsData.text_shadow ?? DEFAULT_SETTINGS.text_shadow,
+            min_font_size: settingsData.min_font_size ?? DEFAULT_SETTINGS.min_font_size,
+            auto_scale_enabled: settingsData.auto_scale_enabled ?? DEFAULT_SETTINGS.auto_scale_enabled,
             reference_font_size: settingsData.reference_font_size ?? DEFAULT_SETTINGS.reference_font_size,
             reference_color: settingsData.reference_color ?? DEFAULT_SETTINGS.reference_color,
             reference_position: settingsData.reference_position ?? DEFAULT_SETTINGS.reference_position,
@@ -106,6 +265,11 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             text_align: settingsData.text_align ?? DEFAULT_SETTINGS.text_align,
             vertical_align: settingsData.vertical_align ?? DEFAULT_SETTINGS.vertical_align,
             padding: settingsData.padding ?? DEFAULT_SETTINGS.padding,
+            padding_top: settingsData.padding_top ?? DEFAULT_SETTINGS.padding_top,
+            padding_bottom: settingsData.padding_bottom ?? DEFAULT_SETTINGS.padding_bottom,
+            padding_left: settingsData.padding_left ?? DEFAULT_SETTINGS.padding_left,
+            padding_right: settingsData.padding_right ?? DEFAULT_SETTINGS.padding_right,
+            padding_advanced: settingsData.padding_advanced ?? DEFAULT_SETTINGS.padding_advanced,
             logo_url: settingsData.logo_url,
             logo_position: settingsData.logo_position ?? DEFAULT_SETTINGS.logo_position,
             logo_size: settingsData.logo_size ?? DEFAULT_SETTINGS.logo_size,
@@ -186,7 +350,10 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
         backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        padding: settings.padding,
+        paddingTop: getPadding(settings).top,
+        paddingRight: getPadding(settings).right,
+        paddingBottom: getPadding(settings).bottom,
+        paddingLeft: getPadding(settings).left,
       }}
     >
       {/* Logo */}
@@ -224,18 +391,48 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             </h1>
           )}
 
-          {/* Verse Text */}
-          {display.verse_text && (
-            <p 
-              className={`${fontFamilyClass} leading-relaxed`}
-              style={{ 
-                fontSize: settings.verse_font_size,
-                color: settings.verse_color,
-              }}
-            >
-              "{display.verse_text}"
-            </p>
-          )}
+          {/* Verse Text with Auto-scaling */}
+          {display.verse_text && (() => {
+            const parts = splitVerse(display.verse_text, settings.min_font_size);
+            const fontSize = calculateFontSize(
+              display.verse_text,
+              settings.verse_font_size,
+              settings.min_font_size,
+              settings.auto_scale_enabled
+            );
+            const textStyles = getTextStyles(settings);
+            
+            // For now, show first part (multi-part navigation can be added later)
+            const currentPart = parts[0];
+            const showPartIndicator = parts.length > 1;
+            
+            return (
+              <div className="relative">
+                <p 
+                  className={`${fontFamilyClass} leading-relaxed`}
+                  style={{ 
+                    fontSize,
+                    color: settings.verse_color,
+                    textAlign: settings.text_align as any,
+                    ...textStyles,
+                  }}
+                >
+                  "{currentPart.text}"
+                </p>
+                {showPartIndicator && (
+                  <p 
+                    className="mt-4 text-center opacity-60"
+                    style={{ 
+                      color: settings.translation_color,
+                      fontSize: settings.translation_font_size,
+                    }}
+                  >
+                    Part {currentPart.partNumber} of {currentPart.totalParts}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Reference - Bottom */}
           {settings.reference_position === 'bottom' && (

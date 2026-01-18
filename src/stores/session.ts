@@ -60,8 +60,8 @@ interface SessionState {
   displayScripture: (id: string) => void;
   redisplayScripture: (id: string) => void;
   clearDisplay: () => void;
-  goToNextVerse: () => void;
-  goToPrevVerse: () => void;
+  goToNextVerse: (splitThreshold?: number) => void;
+  goToPrevVerse: (splitThreshold?: number) => void;
   goToNextPart: () => void;
   goToPrevPart: () => void;
   
@@ -87,26 +87,30 @@ const DEFAULT_STATS: SessionStats = {
   dismissed: 0,
 };
 
-// Split verse helper - threshold comes from display settings (default 70)
-function splitVerseText(text: string, threshold: number = 70): string[] {
+// Split verse helper - threshold = max words per part before splitting
+function splitVerseText(text: string, maxWordsPerPart: number = 70): string[] {
   const words = text.trim().split(/\s+/);
   const wordCount = words.length;
   
   // Don't split if under threshold
-  if (wordCount <= threshold) {
+  if (wordCount <= maxWordsPerPart) {
     return [text];
   }
   
-  // Determine number of parts
-  const wordsPerPart = Math.min(threshold, 70);
-  let numParts = Math.ceil(wordCount / wordsPerPart);
+  // Calculate how many parts we need
+  // Each part should have at most maxWordsPerPart words
+  let numParts = Math.ceil(wordCount / maxWordsPerPart);
   numParts = Math.min(numParts, 5); // Max 5 parts
   
-  // Try to split at sentence boundaries
+  // Calculate actual words per part (distribute evenly)
+  const actualWordsPerPart = Math.ceil(wordCount / numParts);
+  
+  // Try to split at sentence boundaries first
   const sentences = text.split(/(?<=[.;!?])\s+/);
   const parts: string[] = [];
   
   if (sentences.length >= numParts) {
+    // Distribute sentences across parts
     const sentencesPerPart = Math.ceil(sentences.length / numParts);
     for (let i = 0; i < numParts; i++) {
       const start = i * sentencesPerPart;
@@ -116,7 +120,6 @@ function splitVerseText(text: string, threshold: number = 70): string[] {
     }
   } else {
     // Fall back to word-based splitting
-    const actualWordsPerPart = Math.ceil(words.length / numParts);
     for (let i = 0; i < numParts; i++) {
       const start = i * actualWordsPerPart;
       const end = Math.min(start + actualWordsPerPart, words.length);
@@ -261,7 +264,7 @@ export const useSessionStore = create<SessionState>()(
         verseParts: [],
       }),
       
-      goToNextVerse: async () => {
+      goToNextVerse: async (splitThreshold = 70) => {
         const state = get();
         if (!state.currentDisplay) return;
         
@@ -276,17 +279,24 @@ export const useSessionStore = create<SessionState>()(
         };
         
         const verse = await fetchVerse(newRef, state.settings.translation);
+        const newText = verse?.text || '';
+        
+        // Recalculate parts for new verse
+        const parts = splitVerseText(newText, splitThreshold);
         
         set({
           currentDisplay: {
             ...state.currentDisplay,
             reference: newRef,
-            verseText: verse?.text || '',
+            verseText: newText,
           },
+          currentPart: 1,
+          totalParts: parts.length,
+          verseParts: parts,
         });
       },
       
-      goToPrevVerse: async () => {
+      goToPrevVerse: async (splitThreshold = 70) => {
         const state = get();
         if (!state.currentDisplay) return;
         
@@ -301,13 +311,20 @@ export const useSessionStore = create<SessionState>()(
         };
         
         const verse = await fetchVerse(newRef, state.settings.translation);
+        const newText = verse?.text || '';
+        
+        // Recalculate parts for new verse
+        const parts = splitVerseText(newText, splitThreshold);
         
         set({
           currentDisplay: {
             ...state.currentDisplay,
             reference: newRef,
-            verseText: verse?.text || '',
+            verseText: newText,
           },
+          currentPart: 1,
+          totalParts: parts.length,
+          verseParts: parts,
         });
       },
       

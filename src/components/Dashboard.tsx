@@ -563,11 +563,11 @@ function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
             {currentDisplay.translation && <span className="mt-2 text-[10px] text-verse-muted uppercase">— {currentDisplay.translation} —</span>}
             
             <div className="flex items-center gap-2 mt-3">
-              <button onClick={goToPrevVerse} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Previous verse">
+              <button onClick={() => goToPrevVerse()} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Previous verse">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-[10px] text-verse-subtle">Verse</span>
-              <button onClick={goToNextVerse} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Next verse">
+              <button onClick={() => goToNextVerse()} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Next verse">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

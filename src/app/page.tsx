@@ -6,7 +6,7 @@ import {
   BookOpen, Mic, Monitor, FileText, Sparkles, Users, 
   Check, Play, ArrowRight, Menu, X,
   Zap, Shield, Download, Brain, Globe,
-  ChevronDown, Star, Tablet, Quote
+  ChevronDown, Star, Tablet, Quote, Gift
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -172,10 +172,11 @@ function HeroSection() {
             <span className="gradient-text">Right On Time</span>
           </h1>
 
-          {/* Subheadline */}
+          {/* Subheadline - No em-dash, "Luke 15" not verse range */}
           <p className="text-lg sm:text-xl text-verse-muted max-w-2xl mx-auto mb-10 animate-fade-in-up delay-100">
-            VerseCue listens as you preach and detects Bible passages in real time—whether you say 
-            &ldquo;Luke 15:11–32&rdquo; or &ldquo;the prodigal son.&rdquo; Review in a tap. Display with confidence.
+            VerseCue listens as you preach and detects Bible passages in real time. 
+            Whether you say &ldquo;Luke 15&rdquo; or &ldquo;the prodigal son,&rdquo; it knows the passage. 
+            Review in a tap. Display with confidence.
           </p>
 
           {/* CTA Buttons */}
@@ -246,7 +247,7 @@ function HeroSection() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-verse-text">Listening...</p>
-                        <p className="text-xs text-verse-muted">Detecting scriptures in real-time</p>
+                        <p className="text-xs text-verse-muted">Detecting scriptures in real time</p>
                       </div>
                       <div className="ml-auto flex gap-0.5">
                         {[...Array(5)].map((_, i) => (
@@ -261,12 +262,14 @@ function HeroSection() {
                     {/* Detected Verses Queue */}
                     <div className="space-y-2">
                       <p className="text-xs text-verse-muted uppercase tracking-wide">Detected</p>
-                      {["Luke 15:11–32", "John 4:1–26", "Ephesians 6:10–18"].map((verse, i) => (
-                        <div key={verse} className={`p-3 rounded-lg border ${i === 0 ? "bg-gold-500/10 border-gold-500/30" : "bg-verse-surface border-verse-border"}`}>
-                          <p className={`text-sm font-medium ${i === 0 ? "text-gold-400" : "text-verse-text"}`}>{verse}</p>
-                          <p className="text-xs text-verse-muted mt-0.5">
-                            {i === 0 ? "the prodigal son" : i === 1 ? "woman at the well" : "armor of God"}
-                          </p>
+                      {[
+                        { ref: "Luke 15:11-32", context: "the prodigal son" },
+                        { ref: "John 4:1-26", context: "woman at the well" },
+                        { ref: "Ephesians 6:10-18", context: "armor of God" },
+                      ].map((verse, i) => (
+                        <div key={verse.ref} className={`p-3 rounded-lg border ${i === 0 ? "bg-gold-500/10 border-gold-500/30" : "bg-verse-surface border-verse-border"}`}>
+                          <p className={`text-sm font-medium ${i === 0 ? "text-gold-400" : "text-verse-text"}`}>{verse.ref}</p>
+                          <p className="text-xs text-verse-muted mt-0.5">&ldquo;{verse.context}&rdquo;</p>
                         </div>
                       ))}
                     </div>
@@ -275,7 +278,7 @@ function HeroSection() {
                   {/* Right: Display Preview */}
                   <div className="bg-verse-surface rounded-xl border border-verse-border p-6 flex flex-col items-center justify-center text-center">
                     <p className="text-xs text-verse-muted uppercase tracking-wide mb-4">Now Displaying</p>
-                    <p className="font-display text-2xl text-gold-400 mb-3">Luke 15:11–32</p>
+                    <p className="font-display text-2xl text-gold-400 mb-3">Luke 15:11-32</p>
                     <p className="font-scripture text-lg text-verse-text leading-relaxed">
                       &ldquo;And he said, A certain man had two sons: And the younger of them said to his father, 
                       Father, give me the portion of goods that falleth to me...&rdquo;
@@ -293,14 +296,14 @@ function HeroSection() {
 }
 
 // ============================================
-// Context Understanding Section (NEW)
+// Context Understanding Section
 // ============================================
 function ContextSection() {
   const examples = [
-    { phrase: "The prodigal son", reference: "Luke 15:11–32" },
-    { phrase: "The woman at the well", reference: "John 4:1–26" },
-    { phrase: "Armor of God", reference: "Ephesians 6:10–18" },
-    { phrase: "Fruit of the Spirit", reference: "Galatians 5:22–23" },
+    { phrase: "The prodigal son", reference: "Luke 15:11-32" },
+    { phrase: "The woman at the well", reference: "John 4:1-26" },
+    { phrase: "Armor of God", reference: "Ephesians 6:10-18" },
+    { phrase: "Fruit of the Spirit", reference: "Galatians 5:22-23" },
   ];
 
   return (
@@ -334,9 +337,9 @@ function ContextSection() {
           ))}
         </div>
 
-        {/* Control Message */}
+        {/* Control Message - No em-dash */}
         <p className="text-center text-verse-muted">
-          You are always in control—nothing appears on screen without your approval.
+          You are always in control. Nothing appears on screen without your approval.
         </p>
       </div>
     </section>
@@ -361,7 +364,7 @@ function ProblemSolutionSection() {
             </h2>
             <div className="space-y-4 text-verse-muted">
               <p>
-                When a scripture is referenced mid-message, people either scramble for it—or miss it entirely. 
+                When a scripture is referenced mid-message, people either scramble for it or miss it entirely. 
                 Volunteers try to keep up, but spontaneous preaching moves fast.
               </p>
               <ul className="space-y-3">
@@ -369,7 +372,7 @@ function ProblemSolutionSection() {
                   "Congregation misses key verses during powerful moments",
                   "Manual display updates are slow and error-prone",
                   "Volunteers struggle to keep up with spontaneous references",
-                  "Phone-searching creates distraction, not engagement",
+                  "Phone searching creates distraction, not engagement",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3">
                     <X className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -395,9 +398,9 @@ function ProblemSolutionSection() {
               </p>
               <ul className="space-y-3">
                 {[
-                  "Detects explicit references: John 3:16, Romans chapter 8",
-                  "Recognizes quotes: For God so loved the world...",
-                  "Understands context: the prodigal son, armor of God",
+                  "Detects explicit references like John 3:16 or Romans chapter 8",
+                  "Recognizes quoted phrases from well-known passages",
+                  "Understands context like the prodigal son or armor of God",
                   "One-tap approval keeps you in complete control",
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3">
@@ -428,7 +431,7 @@ function HowItWorksSection() {
     {
       number: "02",
       title: "Speak Naturally",
-      description: "Preach as you always do. VerseCue listens and detects scripture references in real time.",
+      description: "Preach as you normally do. VerseCue listens and detects scripture references in real time.",
       icon: Mic,
     },
     {
@@ -496,7 +499,7 @@ function FeaturesSection() {
     {
       icon: Brain,
       title: "Contextual Understanding",
-      description: "Recognizes sermons by meaning—explicit references, quoted phrases, and biblical moments.",
+      description: "Recognizes sermons by meaning. Explicit references, quoted phrases, and biblical moments.",
     },
     {
       icon: Zap,
@@ -511,7 +514,7 @@ function FeaturesSection() {
     {
       icon: Shield,
       title: "You Stay in Control",
-      description: "Approve, dismiss, or re-display—instant control without interrupting the flow.",
+      description: "Approve, dismiss, or re-display. Instant control without interrupting the flow.",
     },
     {
       icon: FileText,
@@ -519,14 +522,14 @@ function FeaturesSection() {
       description: "Generate a clean recap with key themes and takeaways for your team or congregation.",
     },
     {
-      icon: Download,
-      title: "Exports and Archives",
-      description: "Save transcripts and notes. Export as PDF or Word when you need them.",
+      icon: Gift,
+      title: "Member Sermon Pack",
+      description: "After service, members receive scriptures used, a summary, and their saved notes.",
     },
     {
       icon: Tablet,
       title: "Operator Mode",
-      description: "Run sessions from your laptop, tablet, or phone—touch-friendly controls wherever you are.",
+      description: "Run sessions from your laptop, tablet, or phone. Touch-friendly controls wherever you are.",
     },
     {
       icon: Globe,
@@ -595,11 +598,11 @@ function PricingSection() {
       price: { monthly: 19, annual: 15 },
       features: [
         "Unlimited sessions",
-        "Contextual AI detection",
+        "Intelligent detection",
         "3 translations",
-        "AI sermon summaries",
+        "Sermon summaries",
         "PDF and Word export",
-        "Congregation follow-along",
+        "Member Sermon Pack",
         "No watermark",
         "Email support",
       ],
@@ -615,8 +618,8 @@ function PricingSection() {
         "Unlimited team members",
         "Expanded translation library",
         "Multiple locations",
-        "Full congregation platform",
-        "Broadcasts and announcements",
+        "Member Sermon Pack + Broadcasts",
+        "Weekly announcements",
         "Priority support",
       ],
       cta: "Contact Sales",
@@ -746,7 +749,7 @@ function TestimonialsSection() {
       church: "New Life Fellowship",
     },
     {
-      quote: "The AI summaries have been a game-changer for our small groups. Members can review key points and discuss them throughout the week.",
+      quote: "The sermon recaps have been a game-changer for our small groups. Members can review key points and discuss them throughout the week.",
       author: "Rev. Michael Okonkwo",
       role: "Lead Pastor",
       church: "Covenant Assembly",
@@ -806,11 +809,11 @@ function FAQSection() {
   const faqs = [
     {
       question: "How accurate is the detection?",
-      answer: "VerseCue uses layered detection: regex parsing for explicit references, a phrase library for common quotes, and AI for contextual understanding. You remain in control—nothing is displayed without your approval."
+      answer: "VerseCue uses layered detection: regex parsing for explicit references, a phrase library for common quotes, and intelligent contextual understanding. You remain in control. Nothing is displayed without your approval."
     },
     {
       question: "What equipment do I need?",
-      answer: "Any laptop, tablet, or phone with a microphone and internet connection. VerseCue works in your browser—no special software to install. Many churches use the same audio environment they already have."
+      answer: "Any laptop, tablet, or phone with a microphone and internet connection. VerseCue works in your browser with no special software to install. Many churches use the same audio environment they already have."
     },
     {
       question: "Do you store my sermon audio?",
@@ -825,16 +828,16 @@ function FAQSection() {
       answer: "Yes. Operator Mode works on laptops, tablets, and phones with touch-friendly controls. Many churches run sessions from an iPad at the sound booth or front row."
     },
     {
+      question: "What is the Member Sermon Pack?",
+      answer: "After service, members can receive a summary of scriptures used, a recap of key points, and any notes they saved during the message. It helps your congregation engage with the sermon throughout the week."
+    },
+    {
       question: "Can multiple people operate VerseCue during a service?",
       answer: "Yes. Church plan subscribers can add unlimited team members. This is perfect for having one person approve verses while another manages the display."
     },
     {
       question: "What happens if I exceed my session limit?",
-      answer: "On the free tier, after 3 sessions you will be prompted to upgrade. We will never cut you off mid-sermon—your current session will always complete."
-    },
-    {
-      question: "Do you offer discounts for small churches?",
-      answer: "Yes. We offer special pricing for churches under 100 members and for churches in developing nations. Contact us at hello@versecue.app to discuss your situation."
+      answer: "On the free tier, after 3 sessions you will be prompted to upgrade. We will not cut you off mid-sermon. Your current session will complete, and you can upgrade anytime to continue."
     },
   ];
 
@@ -943,7 +946,7 @@ function Footer() {
               <span className="font-display text-xl font-bold text-gold-400">VerseCue</span>
             </Link>
             <p className="text-verse-muted max-w-sm mb-4">
-              AI-powered scripture detection and display for churches. 
+              Intelligent scripture detection and display for churches. 
               The right verse, right on time.
             </p>
             <p className="text-sm text-verse-subtle">
@@ -990,7 +993,7 @@ function Footer() {
         {/* Bottom */}
         <div className="pt-8 border-t border-verse-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-verse-subtle">
-            Made with ♥ for churches worldwide
+            Made with care for churches worldwide
           </p>
           <div className="flex items-center gap-2 text-sm text-verse-subtle">
             <Shield className="w-4 h-4" />

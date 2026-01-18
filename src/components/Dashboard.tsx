@@ -503,6 +503,16 @@ function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
   const clearDisplay = useSessionStore((s) => s.clearDisplay);
   const goToNextVerse = useSessionStore((s) => s.goToNextVerse);
   const goToPrevVerse = useSessionStore((s) => s.goToPrevVerse);
+  const goToNextPart = useSessionStore((s) => s.goToNextPart);
+  const goToPrevPart = useSessionStore((s) => s.goToPrevPart);
+  const currentPart = useSessionStore((s) => s.currentPart);
+  const totalParts = useSessionStore((s) => s.totalParts);
+  const verseParts = useSessionStore((s) => s.verseParts);
+  
+  // Get text for current part
+  const displayText = verseParts.length > 0 
+    ? verseParts[currentPart - 1] 
+    : currentDisplay?.verseText;
   
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
@@ -514,15 +524,50 @@ function DisplayPreview({ orgSlug }: { orgSlug?: string }) {
       <div className="relative aspect-video bg-verse-bg">
         {currentDisplay ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-            <h2 className="font-display text-xl font-bold text-gold-400 mb-3">{currentDisplay.reference.reference}</h2>
-            {currentDisplay.verseText && <p className="font-scripture text-sm text-verse-text leading-relaxed max-w-md line-clamp-3">"{currentDisplay.verseText}"</p>}
+            <h2 className="font-display text-xl font-bold text-gold-400 mb-2">{currentDisplay.reference.reference}</h2>
+            
+            {/* Part indicator for operator */}
+            {totalParts > 1 && (
+              <div className="flex items-center gap-2 mb-2">
+                <button 
+                  onClick={goToPrevPart} 
+                  disabled={currentPart <= 1}
+                  className={cn(
+                    "p-1 rounded transition-colors",
+                    currentPart <= 1 
+                      ? "text-verse-border cursor-not-allowed" 
+                      : "text-gold-400 hover:text-gold-300"
+                  )}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs font-medium text-gold-400 px-2 py-0.5 rounded bg-gold-500/20">
+                  Part {currentPart} of {totalParts}
+                </span>
+                <button 
+                  onClick={goToNextPart} 
+                  disabled={currentPart >= totalParts}
+                  className={cn(
+                    "p-1 rounded transition-colors",
+                    currentPart >= totalParts 
+                      ? "text-verse-border cursor-not-allowed" 
+                      : "text-gold-400 hover:text-gold-300"
+                  )}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            
+            {displayText && <p className="font-scripture text-sm text-verse-text leading-relaxed max-w-md line-clamp-3">"{displayText}"</p>}
             {currentDisplay.translation && <span className="mt-2 text-[10px] text-verse-muted uppercase">— {currentDisplay.translation} —</span>}
             
             <div className="flex items-center gap-2 mt-3">
-              <button onClick={goToPrevVerse} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors">
+              <button onClick={goToPrevVerse} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Previous verse">
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <button onClick={goToNextVerse} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors">
+              <span className="text-[10px] text-verse-subtle">Verse</span>
+              <button onClick={goToNextVerse} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Next verse">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -754,9 +799,13 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
 
   // Broadcast display changes to Supabase for remote display
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
+  const currentPart = useSessionStore((s) => s.currentPart);
+  const totalParts = useSessionStore((s) => s.totalParts);
+  const verseParts = useSessionStore((s) => s.verseParts);
+  
   useEffect(() => {
-    broadcastDisplay(currentDisplay);
-  }, [currentDisplay, broadcastDisplay]);
+    broadcastDisplay(currentDisplay, { currentPart, totalParts, verseParts });
+  }, [currentDisplay, currentPart, totalParts, verseParts, broadcastDisplay]);
   
   const handleTranscript = useCallback(async (segment: TranscriptSegment) => {
     addTranscriptSegment(segment);

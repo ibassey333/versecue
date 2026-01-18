@@ -13,8 +13,17 @@ interface DisplayState {
   verse_start: number | null;
   verse_end: number | null;
   verse_text: string | null;
+  full_verse_text: string | null;
   translation: string | null;
+  current_part: number;
+  total_parts: number;
   updated_at: string;
+}
+
+interface BroadcastOptions {
+  currentPart?: number;
+  totalParts?: number;
+  verseParts?: string[];
 }
 
 export function useDisplaySync(orgSlug?: string) {
@@ -26,11 +35,23 @@ export function useDisplaySync(orgSlug?: string) {
   const channelName = `display-${sessionId}`;
   
   // Broadcast display to all connected clients
-  const broadcastDisplay = useCallback(async (item: QueueItem | null) => {
+  const broadcastDisplay = useCallback(async (
+    item: QueueItem | null, 
+    options?: BroadcastOptions
+  ) => {
     console.log('[DisplaySync] Broadcasting to:', sessionId, item?.reference.reference || 'clear');
+    
+    const currentPart = options?.currentPart || 1;
+    const totalParts = options?.totalParts || 1;
+    const verseParts = options?.verseParts || [];
     
     try {
       if (item) {
+        // Get the text for current part, or full text if not split
+        const displayText = verseParts.length > 0 
+          ? verseParts[currentPart - 1] || item.verseText || ''
+          : item.verseText || '';
+        
         const { error } = await supabase
           .from('display_state')
           .upsert({
@@ -40,15 +61,18 @@ export function useDisplaySync(orgSlug?: string) {
             chapter: item.reference.chapter,
             verse_start: item.reference.verseStart,
             verse_end: item.reference.verseEnd,
-            verse_text: item.verseText || '',
+            verse_text: displayText,
+            full_verse_text: item.verseText || '',
             translation: item.translation || 'KJV',
+            current_part: currentPart,
+            total_parts: totalParts,
             updated_at: new Date().toISOString(),
           });
           
         if (error) {
           console.error('[DisplaySync] Broadcast error:', error);
         } else {
-          console.log('[DisplaySync] Broadcast success');
+          console.log('[DisplaySync] Broadcast success - Part', currentPart, 'of', totalParts);
         }
       } else {
         // Clear display
@@ -62,7 +86,10 @@ export function useDisplaySync(orgSlug?: string) {
             verse_start: null,
             verse_end: null,
             verse_text: null,
+            full_verse_text: null,
             translation: null,
+            current_part: 1,
+            total_parts: 1,
             updated_at: new Date().toISOString(),
           });
           

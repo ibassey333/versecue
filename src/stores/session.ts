@@ -33,6 +33,9 @@ interface SessionState {
   
   // Display
   currentDisplay: QueueItem | null;
+  currentPart: number;
+  totalParts: number;
+  verseParts: string[];
   
   // Settings
   settings: SessionSettings;
@@ -59,6 +62,8 @@ interface SessionState {
   clearDisplay: () => void;
   goToNextVerse: () => void;
   goToPrevVerse: () => void;
+  goToNextPart: () => void;
+  goToPrevPart: () => void;
   
   updateSettings: (settings: Partial<SessionSettings>) => void;
   setTranslation: (translation: string) => void;
@@ -82,6 +87,47 @@ const DEFAULT_STATS: SessionStats = {
   dismissed: 0,
 };
 
+// Split verse helper - threshold comes from display settings (default 70)
+function splitVerseText(text: string, threshold: number = 70): string[] {
+  const words = text.trim().split(/\s+/);
+  const wordCount = words.length;
+  
+  // Don't split if under threshold
+  if (wordCount <= threshold) {
+    return [text];
+  }
+  
+  // Determine number of parts
+  const wordsPerPart = Math.min(threshold, 70);
+  let numParts = Math.ceil(wordCount / wordsPerPart);
+  numParts = Math.min(numParts, 5); // Max 5 parts
+  
+  // Try to split at sentence boundaries
+  const sentences = text.split(/(?<=[.;!?])\s+/);
+  const parts: string[] = [];
+  
+  if (sentences.length >= numParts) {
+    const sentencesPerPart = Math.ceil(sentences.length / numParts);
+    for (let i = 0; i < numParts; i++) {
+      const start = i * sentencesPerPart;
+      const end = Math.min(start + sentencesPerPart, sentences.length);
+      const partText = sentences.slice(start, end).join(' ').trim();
+      if (partText) parts.push(partText);
+    }
+  } else {
+    // Fall back to word-based splitting
+    const actualWordsPerPart = Math.ceil(words.length / numParts);
+    for (let i = 0; i < numParts; i++) {
+      const start = i * actualWordsPerPart;
+      const end = Math.min(start + actualWordsPerPart, words.length);
+      const partText = words.slice(start, end).join(' ').trim();
+      if (partText) parts.push(partText);
+    }
+  }
+  
+  return parts.length > 0 ? parts : [text];
+}
+
 export const useSessionStore = create<SessionState>()(
   persist(
     (set, get) => ({
@@ -96,6 +142,9 @@ export const useSessionStore = create<SessionState>()(
       approvedQueue: [],
       detectionHistory: [],
       currentDisplay: null,
+      currentPart: 1,
+      totalParts: 1,
+      verseParts: [],
       settings: DEFAULT_SETTINGS,
       stats: DEFAULT_STATS,
       
@@ -169,26 +218,48 @@ export const useSessionStore = create<SessionState>()(
         approvedQueue: state.approvedQueue.filter((q) => q.id !== id),
       })),
       
-      displayScripture: (id) => set((state) => {
+      displayScripture: (id, splitThreshold = 70) => set((state) => {
         const item = state.approvedQueue.find((q) => q.id === id);
         if (!item) return state;
         
         const updatedItem = { ...item, displayedAt: new Date() };
         
+        // Calculate verse parts
+        const fullText = item.verseText || '';
+        const parts = splitVerseText(fullText, splitThreshold);
+        
         return {
           currentDisplay: updatedItem,
+          currentPart: 1,
+          totalParts: parts.length,
+          verseParts: parts,
           approvedQueue: state.approvedQueue.map((q) => q.id === id ? updatedItem : q),
           stats: { ...state.stats, displayed: state.stats.displayed + 1 },
         };
       }),
       
-      redisplayScripture: (id) => set((state) => {
+      redisplayScripture: (id, splitThreshold = 70) => set((state) => {
         const item = state.approvedQueue.find((q) => q.id === id);
         if (!item) return state;
-        return { currentDisplay: item };
+        
+        // Recalculate parts
+        const fullText = item.verseText || '';
+        const parts = splitVerseText(fullText, splitThreshold);
+        
+        return { 
+          currentDisplay: item,
+          currentPart: 1,
+          totalParts: parts.length,
+          verseParts: parts,
+        };
       }),
       
-      clearDisplay: () => set({ currentDisplay: null }),
+      clearDisplay: () => set({ 
+        currentDisplay: null,
+        currentPart: 1,
+        totalParts: 1,
+        verseParts: [],
+      }),
       
       goToNextVerse: async () => {
         const state = get();
@@ -240,6 +311,16 @@ export const useSessionStore = create<SessionState>()(
         });
       },
       
+      goToNextPart: () => set((state) => {
+        if (!state.currentDisplay || state.currentPart >= state.totalParts) return state;
+        return { currentPart: state.currentPart + 1 };
+      }),
+      
+      goToPrevPart: () => set((state) => {
+        if (!state.currentDisplay || state.currentPart <= 1) return state;
+        return { currentPart: state.currentPart - 1 };
+      }),
+      
       updateSettings: (newSettings) => set((state) => ({
         settings: { ...state.settings, ...newSettings },
       })),
@@ -271,6 +352,9 @@ export const useSessionStore = create<SessionState>()(
         approvedQueue: [],
         detectionHistory: [],
         currentDisplay: null,
+        currentPart: 1,
+        totalParts: 1,
+        verseParts: [],
         stats: DEFAULT_STATS,
         isListening: false,
         isPaused: false,

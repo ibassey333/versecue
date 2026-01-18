@@ -301,7 +301,7 @@ function HeroSection() {
 function ContextSection() {
   const examples = [
     { phrase: "The prodigal son", reference: "Luke 15:11-32" },
-    { phrase: "The woman at the well", reference: "John 4:1-26" },
+    { phrase: "Woman at the well", reference: "John 4:1-26" },
     { phrase: "Armor of God", reference: "Ephesians 6:10-18" },
     { phrase: "Fruit of the Spirit", reference: "Galatians 5:22-23" },
   ];
@@ -339,7 +339,7 @@ function ContextSection() {
 
         {/* Control Message - No em-dash */}
         <p className="text-center text-verse-muted">
-          You are always in control. Nothing appears on screen without your approval.
+          You stay in control. Nothing appears on screen without your approval.
         </p>
       </div>
     </section>
@@ -616,10 +616,10 @@ function PricingSection() {
       features: [
         "Everything in Pro",
         "Unlimited team members",
+        "Multiple ministries and services",
+        "Ministry-level reports and insights",
+        "Segmented broadcasts",
         "Expanded translation library",
-        "Multiple locations",
-        "Member Sermon Pack + Broadcasts",
-        "Weekly announcements",
         "Priority support",
       ],
       cta: "Contact Sales",
@@ -828,8 +828,12 @@ function FAQSection() {
       answer: "Yes. Operator Mode works on laptops, tablets, and phones with touch-friendly controls. Many churches run sessions from an iPad at the sound booth or front row."
     },
     {
+      question: "Can members follow along on their devices?",
+      answer: "Yes. Members can use an optional companion view for note-taking during the message. After service, they receive a complete sermon pack with scriptures used, a recap, and their saved notes."
+    },
+    {
       question: "What is the Member Sermon Pack?",
-      answer: "After service, members can receive a summary of scriptures used, a recap of key points, and any notes they saved during the message. It helps your congregation engage with the sermon throughout the week."
+      answer: "After service, members receive the scriptures used, a recap of key points, and any notes they saved during the message. It helps your congregation engage with the sermon throughout the week."
     },
     {
       question: "Can multiple people operate VerseCue during a service?",

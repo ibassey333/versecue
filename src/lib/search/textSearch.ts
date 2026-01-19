@@ -27,7 +27,7 @@ async function buildSearchIndex(): Promise<void> {
   let kjvData: Record<string, Record<string, Record<string, string>>>;
   
   try {
-    const response = await fetch('/kjv.json');
+    const response = await fetch('/bibles/kjv.json');
     if (response.ok) {
       kjvData = await response.json();
     } else {

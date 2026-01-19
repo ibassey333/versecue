@@ -20,6 +20,7 @@ import { TranscriptSegment, AudioDevice, QueueItem, ScriptureReference } from '@
 import { getEnabledTranslations } from '@/config/translations';
 import { ControlsBar, SettingsDrawer } from '@/components/dashboard-ui';
 import { parseScriptures } from '@/lib/detection/parser';
+import { SmartScriptureSearch } from '@/components/SmartScriptureSearch';
 
 // ============================================
 // API Status Component
@@ -968,7 +969,11 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
           {/* Left Column: Transcript + Search + Needs Review */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
             <TranscriptPanel speechProvider={activeSpeechProvider} className="h-[400px]" />
-            <ManualSearch onSearch={handleManualSearch} />
+            <SmartScriptureSearch 
+              onSelect={handleManualSearch}
+              aiEnabled={settings.enableGroqDetection}
+              placeholder="Type book, reference, or verse text..."
+            />
             <NeedsReview />
           </div>
           

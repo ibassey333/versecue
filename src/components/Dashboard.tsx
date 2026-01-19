@@ -499,7 +499,57 @@ function ReadyToDisplay({ className, splitThreshold = 70 }: { className?: string
 // ============================================
 // Display Preview
 // ============================================
-function DisplayPreview({ orgSlug, splitThreshold = 70 }: { orgSlug?: string; splitThreshold?: number }) {
+// WYSIWYG Preview - Shows exact display styling
+// ============================================
+interface DisplaySettingsPreview {
+  verse_font_size: number;
+  verse_font_family: string;
+  verse_color: string;
+  verse_bold: boolean;
+  verse_italic: boolean;
+  text_outline: boolean;
+  text_outline_color: string;
+  text_outline_width: number;
+  text_shadow: boolean;
+  reference_font_size: number;
+  reference_color: string;
+  reference_position: string;
+  show_translation: boolean;
+  translation_color: string;
+  background_color: string;
+  background_image_url: string | null;
+  text_align: string;
+  vertical_align: string;
+  padding: number;
+}
+
+const DEFAULT_DISPLAY_SETTINGS: DisplaySettingsPreview = {
+  verse_font_size: 42,
+  verse_font_family: 'serif',
+  verse_color: '#ffffff',
+  verse_bold: false,
+  verse_italic: false,
+  text_outline: false,
+  text_outline_color: '#000000',
+  text_outline_width: 1,
+  text_shadow: true,
+  reference_font_size: 56,
+  reference_color: '#fbbf24',
+  reference_position: 'top',
+  show_translation: true,
+  translation_color: '#9ca3af',
+  background_color: '#000000',
+  background_image_url: null,
+  text_align: 'center',
+  vertical_align: 'center',
+  padding: 48,
+};
+
+function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: { 
+  orgSlug?: string; 
+  splitThreshold?: number;
+  displaySettings?: DisplaySettingsPreview | null;
+}) {
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
   const clearDisplay = useSessionStore((s) => s.clearDisplay);
   const goToNextVerse = useSessionStore((s) => s.goToNextVerse);
@@ -510,77 +560,182 @@ function DisplayPreview({ orgSlug, splitThreshold = 70 }: { orgSlug?: string; sp
   const totalParts = useSessionStore((s) => s.totalParts);
   const verseParts = useSessionStore((s) => s.verseParts);
   
+  const settings = displaySettings || DEFAULT_DISPLAY_SETTINGS;
+  
   // Get text for current part
   const displayText = verseParts.length > 0 
     ? verseParts[currentPart - 1] 
     : currentDisplay?.verseText;
   
+  // Scale factor for preview (display is ~1920px, preview is ~400px)
+  const scale = 0.25;
+  
+  // Font family mapping
+  const fontFamily = {
+    serif: 'Georgia, serif',
+    sans: 'system-ui, sans-serif',
+    mono: 'monospace',
+  }[settings.verse_font_family] || 'Georgia, serif';
+  
+  // Vertical alignment
+  const verticalAlign = {
+    top: 'justify-start pt-4',
+    center: 'justify-center',
+    bottom: 'justify-end pb-4',
+  }[settings.vertical_align] || 'justify-center';
+  
+  // Build verse text styles
+  const verseStyles: React.CSSProperties = {
+    fontFamily,
+    fontSize: settings.verse_font_size * scale,
+    color: settings.verse_color,
+    fontWeight: settings.verse_bold ? 'bold' : 'normal',
+    fontStyle: settings.verse_italic ? 'italic' : 'normal',
+    textAlign: settings.text_align as any,
+    textShadow: settings.text_shadow ? '1px 1px 2px rgba(0,0,0,0.5)' : 'none',
+  };
+  
+  if (settings.text_outline) {
+    verseStyles.WebkitTextStroke = `${settings.text_outline_width * scale}px ${settings.text_outline_color}`;
+  }
+  
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
-        <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Display Preview</h3>
+        <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Live Preview</h3>
         <a href={orgSlug ? `/display/${orgSlug}` : "/display"} target="_blank" className="text-xs text-verse-subtle hover:text-verse-text transition-colors">Open Display ↗</a>
       </div>
       
-      <div className="relative aspect-video bg-verse-bg">
+      {/* WYSIWYG Preview Container */}
+      <div 
+        className="relative aspect-video overflow-hidden"
+        style={{
+          backgroundColor: settings.background_color,
+          backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
         {currentDisplay ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-            <h2 className="font-display text-xl font-bold text-gold-400 mb-2">{currentDisplay.reference.reference}</h2>
+          <div 
+            className={cn("absolute inset-0 flex flex-col items-center text-center", verticalAlign)}
+            style={{ padding: settings.padding * scale }}
+          >
+            {/* Reference - Top */}
+            {settings.reference_position === 'top' && (
+              <h2 
+                className="font-bold mb-1"
+                style={{ 
+                  fontSize: settings.reference_font_size * scale,
+                  color: settings.reference_color,
+                  textAlign: settings.text_align as any,
+                }}
+              >
+                {currentDisplay.reference.reference}
+              </h2>
+            )}
             
             {/* Part indicator for operator */}
             {totalParts > 1 && (
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-1 mb-1 bg-black/50 rounded-lg px-2 py-1">
                 <button 
                   onClick={goToPrevPart} 
                   disabled={currentPart <= 1}
                   className={cn(
-                    "p-1 rounded transition-colors",
+                    "p-0.5 rounded transition-colors",
                     currentPart <= 1 
-                      ? "text-verse-border cursor-not-allowed" 
+                      ? "text-white/20 cursor-not-allowed" 
                       : "text-gold-400 hover:text-gold-300"
                   )}
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3 h-3" />
                 </button>
-                <span className="text-xs font-medium text-gold-400 px-2 py-0.5 rounded bg-gold-500/20">
-                  Part {currentPart} of {totalParts}
+                <span 
+                  className="text-[8px] font-medium px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24' }}
+                >
+                  Part {currentPart}/{totalParts}
                 </span>
                 <button 
                   onClick={goToNextPart} 
                   disabled={currentPart >= totalParts}
                   className={cn(
-                    "p-1 rounded transition-colors",
+                    "p-0.5 rounded transition-colors",
                     currentPart >= totalParts 
-                      ? "text-verse-border cursor-not-allowed" 
+                      ? "text-white/20 cursor-not-allowed" 
                       : "text-gold-400 hover:text-gold-300"
                   )}
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3 h-3" />
                 </button>
               </div>
             )}
             
-            {displayText && <p className="font-scripture text-sm text-verse-text leading-relaxed max-w-md line-clamp-3">"{displayText}"</p>}
-            {currentDisplay.translation && <span className="mt-2 text-[10px] text-verse-muted uppercase">— {currentDisplay.translation} —</span>}
+            {/* Verse Text */}
+            {displayText && (
+              <p className="leading-relaxed" style={verseStyles}>
+                "{displayText}"
+              </p>
+            )}
             
-            <div className="flex items-center gap-2 mt-3">
-              <button onClick={() => goToPrevVerse(splitThreshold)} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Previous verse">
-                <ChevronLeft className="w-4 h-4" />
+            {/* Reference - Bottom */}
+            {settings.reference_position === 'bottom' && (
+              <h2 
+                className="font-bold mt-1"
+                style={{ 
+                  fontSize: settings.reference_font_size * scale,
+                  color: settings.reference_color,
+                  textAlign: settings.text_align as any,
+                }}
+              >
+                {currentDisplay.reference.reference}
+              </h2>
+            )}
+            
+            {/* Translation */}
+            {settings.show_translation && currentDisplay.translation && (
+              <span 
+                className="mt-1 uppercase tracking-wider"
+                style={{ 
+                  fontSize: 8,
+                  color: settings.translation_color,
+                }}
+              >
+                — {currentDisplay.translation} —
+              </span>
+            )}
+            
+            {/* Verse Navigation */}
+            <div className="flex items-center gap-2 mt-2">
+              <button 
+                onClick={() => goToPrevVerse(splitThreshold)} 
+                className="p-1 rounded bg-black/30 text-white/70 hover:text-white transition-colors" 
+                title="Previous verse"
+              >
+                <ChevronLeft className="w-3 h-3" />
               </button>
-              <span className="text-[10px] text-verse-subtle">Verse</span>
-              <button onClick={() => goToNextVerse(splitThreshold)} className="p-1.5 rounded-lg bg-verse-surface text-verse-muted hover:text-verse-text transition-colors" title="Next verse">
-                <ChevronRight className="w-4 h-4" />
+              <span className="text-[8px] text-white/50">Verse</span>
+              <button 
+                onClick={() => goToNextVerse(splitThreshold)} 
+                className="p-1 rounded bg-black/30 text-white/70 hover:text-white transition-colors" 
+                title="Next verse"
+              >
+                <ChevronRight className="w-3 h-3" />
               </button>
             </div>
             
-            <button onClick={clearDisplay} className="absolute top-2 right-2 p-1.5 rounded-lg bg-verse-surface/80 text-verse-muted hover:text-verse-text text-sm transition-colors">
+            {/* Clear button */}
+            <button 
+              onClick={clearDisplay} 
+              className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/70 hover:text-white transition-colors"
+            >
               <X className="w-3 h-3" />
             </button>
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div className="text-3xl mb-2 opacity-30">📺</div>
-            <p className="text-verse-muted text-xs">No scripture displayed</p>
+            <div className="text-2xl mb-1 opacity-30">📺</div>
+            <p className="text-white/50 text-[10px]">No scripture displayed</p>
           </div>
         )}
       </div>
@@ -800,14 +955,11 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
 
   // Fetch split threshold from display settings
   const [splitThreshold, setSplitThreshold] = useState(70);
+  const [displaySettings, setDisplaySettings] = useState<DisplaySettingsPreview | null>(null);
   
   useEffect(() => {
-    const fetchThreshold = async () => {
-      console.log('[Threshold] orgSlug:', orgSlug);
-      if (!orgSlug) {
-        console.log('[Threshold] No orgSlug, skipping fetch');
-        return;
-      }
+    const fetchDisplaySettings = async () => {
+      if (!orgSlug) return;
       const supabase = (await import('@/lib/supabase/client')).createClient();
       const { data: org } = await supabase
         .from('organizations')
@@ -815,24 +967,40 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
         .eq('slug', orgSlug)
         .single();
       
-      console.log('[Threshold] Org found:', org);
-      
       if (org) {
         const { data: settings } = await supabase
           .from('display_settings')
-          .select('split_word_threshold')
+          .select('*')
           .eq('organization_id', org.id)
           .single();
         
-        console.log('[Threshold] Settings:', settings);
-        
-        if (settings?.split_word_threshold) {
-          console.log('[Threshold] Setting to:', settings.split_word_threshold);
-          setSplitThreshold(settings.split_word_threshold);
+        if (settings) {
+          setSplitThreshold(settings.split_word_threshold || 70);
+          setDisplaySettings({
+            verse_font_size: settings.verse_font_size ?? 42,
+            verse_font_family: settings.verse_font_family ?? 'serif',
+            verse_color: settings.verse_color ?? '#ffffff',
+            verse_bold: settings.verse_bold ?? false,
+            verse_italic: settings.verse_italic ?? false,
+            text_outline: settings.text_outline ?? false,
+            text_outline_color: settings.text_outline_color ?? '#000000',
+            text_outline_width: settings.text_outline_width ?? 1,
+            text_shadow: settings.text_shadow ?? true,
+            reference_font_size: settings.reference_font_size ?? 56,
+            reference_color: settings.reference_color ?? '#fbbf24',
+            reference_position: settings.reference_position ?? 'top',
+            show_translation: settings.show_translation ?? true,
+            translation_color: settings.translation_color ?? '#9ca3af',
+            background_color: settings.background_color ?? '#000000',
+            background_image_url: settings.background_image_url,
+            text_align: settings.text_align ?? 'center',
+            vertical_align: settings.vertical_align ?? 'center',
+            padding: settings.padding ?? 48,
+          });
         }
       }
     };
-    fetchThreshold();
+    fetchDisplaySettings();
   }, [orgSlug]);
   
   // Broadcast display changes to Supabase for remote display
@@ -984,7 +1152,7 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
           
           {/* Right Column: Display + Translation + Stats + Log */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
-            <DisplayPreview orgSlug={orgSlug} splitThreshold={splitThreshold} />
+            <DisplayPreview orgSlug={orgSlug} splitThreshold={splitThreshold} displaySettings={displaySettings} />
             <TranslationSelector />
             <SessionStats />
             <SessionLog />

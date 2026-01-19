@@ -706,10 +706,10 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
             )}
             
             {/* Verse Navigation */}
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 bg-black/50 rounded-lg px-2 py-1">
               <button 
                 onClick={() => goToPrevVerse(splitThreshold)} 
-                className="p-1 rounded bg-black/30 text-white/70 hover:text-white transition-colors" 
+                className="p-1 rounded text-white/70 hover:text-white transition-colors" 
                 title="Previous verse"
               >
                 <ChevronLeft className="w-3 h-3" />
@@ -717,7 +717,7 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
               <span className="text-[8px] text-white/50">Verse</span>
               <button 
                 onClick={() => goToNextVerse(splitThreshold)} 
-                className="p-1 rounded bg-black/30 text-white/70 hover:text-white transition-colors" 
+                className="p-1 rounded text-white/70 hover:text-white transition-colors" 
                 title="Next verse"
               >
                 <ChevronRight className="w-3 h-3" />

@@ -438,6 +438,7 @@ export default function DisplaySettingsPage() {
   const supabase = createClient();
 
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
+  const [currentVerse, setCurrentVerse] = useState<{ reference: string; text: string; translation: string } | null>(null);
   const [savedSettings, setSavedSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -499,6 +500,57 @@ export default function DisplaySettingsPage() {
 
     loadSettings();
   }, [org]);
+
+  // Fetch current verse from display_state for preview
+  useEffect(() => {
+    if (!org) return;
+    
+    const fetchCurrentVerse = async () => {
+      const { data: displayState } = await supabase
+        .from('display_state')
+        .select('reference, verse_text, translation')
+        .eq('id', org.slug)
+        .single();
+      
+      if (displayState?.verse_text) {
+        setCurrentVerse({
+          reference: displayState.reference || 'John 3:16',
+          text: displayState.verse_text,
+          translation: displayState.translation || 'KJV',
+        });
+      }
+    };
+    fetchCurrentVerse();
+    
+    // Subscribe to realtime verse changes
+    const verseChannel = supabase
+      .channel('settings-verse-preview')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'display_state',
+          filter: `id=eq.${org.slug}`,
+        },
+        (payload: any) => {
+          if (payload.new?.verse_text) {
+            setCurrentVerse({
+              reference: payload.new.reference || 'John 3:16',
+              text: payload.new.verse_text,
+              translation: payload.new.translation || 'KJV',
+            });
+          } else {
+            setCurrentVerse(null);
+          }
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(verseChannel);
+    };
+  }, [org, supabase]);
 
   // Track changes
   useEffect(() => {
@@ -1207,7 +1259,7 @@ export default function DisplaySettingsPage() {
                       textAlign: settings.text_align as any,
                     }}
                   >
-                    "For God so loved the world, that he gave his only begotten Son..."
+                    {currentVerse?.text ? `"${currentVerse.text}"` : '"For God so loved the world, that he gave his only begotten Son..."'}
                   </p>
 
                   {/* Reference - Bottom */}
@@ -1219,9 +1271,9 @@ export default function DisplaySettingsPage() {
                         color: settings.reference_color,
                       }}
                     >
-                      John 3:16
+                      {currentVerse?.reference || 'John 3:16'}
                       {settings.show_translation && settings.translation_position === 'inline' && (
-                        <span style={{ color: settings.translation_color, fontSize: settings.translation_font_size / 3, fontWeight: 'normal' }}> (KJV)</span>
+                        <span style={{ color: settings.translation_color, fontSize: settings.translation_font_size / 3, fontWeight: 'normal' }}> ({currentVerse?.translation || 'KJV'})</span>
                       )}
                     </h2>
                   )}

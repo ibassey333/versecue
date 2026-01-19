@@ -28,5 +28,9 @@ export {
   formatReference,
   type SearchResult,
   type SearchResultType,
-  type SearchState,
 } from './smartSearch';
+
+export {
+  searchWithAI,
+  type AISearchResult,
+} from './aiSearch';

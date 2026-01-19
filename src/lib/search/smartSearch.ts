@@ -9,9 +9,9 @@ import {
   getBookSuggestions,
   looksLikeReference,
   BIBLE_BOOKS,
-  ParsedReference,
 } from './flexibleParser';
-import { searchKJVText, looksLikeVerseText, TextSearchResult } from './textSearch';
+import { searchKJVText, looksLikeVerseText } from './textSearch';
+import { searchWithAI } from './aiSearch';
 
 export type SearchResultType = 'book' | 'reference' | 'text' | 'ai' | 'recent';
 
@@ -24,72 +24,39 @@ export interface SearchResult {
   confidence: number;
 }
 
-export interface SearchState {
-  mode: 'idle' | 'book' | 'chapter' | 'verse' | 'text' | 'searching';
-  selectedBook: typeof BIBLE_BOOKS[0] | null;
-  chapter: number | null;
-  results: SearchResult[];
-}
-
-// Recent searches storage
 const RECENT_STORAGE_KEY = 'versecue_recent_searches';
 const MAX_RECENT = 10;
 
 export function getRecentSearches(): ScriptureReference[] {
   if (typeof window === 'undefined') return [];
-  
   try {
     const stored = localStorage.getItem(RECENT_STORAGE_KEY);
     return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 export function addRecentSearch(ref: ScriptureReference): void {
   if (typeof window === 'undefined') return;
-  
   try {
     const recent = getRecentSearches();
-    
-    // Remove if already exists
     const filtered = recent.filter(r => r.reference !== ref.reference);
-    
-    // Add to front
     filtered.unshift(ref);
-    
-    // Trim to max
     const trimmed = filtered.slice(0, MAX_RECENT);
-    
     localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(trimmed));
-  } catch {
-    // Ignore storage errors
-  }
+  } catch {}
 }
 
 export function clearRecentSearches(): void {
   if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.removeItem(RECENT_STORAGE_KEY);
-  } catch {
-    // Ignore
-  }
+  try { localStorage.removeItem(RECENT_STORAGE_KEY); } catch {}
 }
 
-/**
- * Main search function - orchestrates all layers
- */
 export async function smartSearch(
   query: string,
-  options: {
-    aiEnabled?: boolean;
-    includeRecent?: boolean;
-  } = {}
+  options: { aiEnabled?: boolean; includeRecent?: boolean } = {}
 ): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) {
-    // Return recent searches if enabled
     if (options.includeRecent) {
       return getRecentSearches().slice(0, 5).map(ref => ({
         type: 'recent' as SearchResultType,
@@ -103,10 +70,9 @@ export async function smartSearch(
   
   const results: SearchResult[] = [];
   
-  // Layer 1: Check for book suggestions (autocomplete)
+  // Layer 1: Book suggestions
   const bookSuggestions = getBookSuggestions(trimmed);
   if (bookSuggestions.length > 0 && !trimmed.includes(' ') && !/\d/.test(trimmed)) {
-    // Just typing a book name
     for (const book of bookSuggestions) {
       results.push({
         type: 'book',
@@ -120,7 +86,7 @@ export async function smartSearch(
     return results;
   }
   
-  // Layer 2: Try flexible reference parsing
+  // Layer 2: Reference parsing
   if (looksLikeReference(trimmed)) {
     const parsed = parseFlexibleReference(trimmed);
     if (parsed) {
@@ -137,9 +103,7 @@ export async function smartSearch(
         confidence: 1,
       });
       
-      // Also suggest chapter if only chapter was given
       if (parsed.verseStart === null) {
-        // Suggest first few verses
         for (let v = 1; v <= 3; v++) {
           results.push({
             type: 'reference',
@@ -155,50 +119,52 @@ export async function smartSearch(
           });
         }
       }
-      
       return results;
     }
   }
   
-  // Layer 3: Text search in KJV
+  // Layer 3: Text search
   if (looksLikeVerseText(trimmed) || trimmed.length >= 10) {
     const textResults = await searchKJVText(trimmed, 5);
-    
     for (const tr of textResults) {
       results.push({
         type: 'text',
         reference: tr.reference,
         text: tr.reference.reference,
-        preview: truncateText(tr.text, 80),
+        preview: tr.text.length > 80 ? tr.text.substring(0, 77) + '...' : tr.text,
         confidence: tr.score,
       });
     }
-    
-    if (results.length > 0) {
-      return results;
+    if (results.length > 0) return results;
+  }
+  
+  // Layer 4: AI Search (only if enabled and no results yet)
+  if (options.aiEnabled && results.length === 0 && trimmed.length >= 3) {
+    try {
+      const aiResults = await searchWithAI(trimmed);
+      for (const ar of aiResults) {
+        results.push({
+          type: 'ai',
+          reference: ar.reference,
+          text: ar.reference.reference,
+          preview: ar.preview || ar.reasoning,
+          confidence: ar.confidence,
+        });
+      }
+    } catch (error) {
+      console.error('[SmartSearch] AI search failed:', error);
     }
   }
   
-  // Layer 4: AI Search (paid only)
-  if (options.aiEnabled && results.length === 0) {
-    // TODO: Implement AI search with Groq
-    // For now, return empty - this will be added for paid tiers
-  }
-  
-  // No results
   return results;
 }
 
-/**
- * Get suggestions as user types (debounced in UI)
- */
 export async function getSuggestions(
   query: string,
   selectedBook: typeof BIBLE_BOOKS[0] | null = null
 ): Promise<SearchResult[]> {
   const trimmed = query.trim();
   
-  // If book is selected, suggest chapters/verses
   if (selectedBook) {
     const numMatch = trimmed.match(/^(\d+)(?::(\d+))?$/);
     if (numMatch) {
@@ -207,9 +173,7 @@ export async function getSuggestions(
       
       if (chapter >= 1 && chapter <= selectedBook.chapters) {
         const results: SearchResult[] = [];
-        
         if (verse !== null) {
-          // Specific verse
           results.push({
             type: 'reference',
             reference: {
@@ -223,7 +187,6 @@ export async function getSuggestions(
             confidence: 1,
           });
         } else {
-          // Chapter, suggest with first verse
           results.push({
             type: 'reference',
             reference: {
@@ -238,12 +201,10 @@ export async function getSuggestions(
             confidence: 1,
           });
         }
-        
         return results;
       }
     }
     
-    // No valid number yet, show chapter suggestions
     const results: SearchResult[] = [];
     for (let c = 1; c <= Math.min(5, selectedBook.chapters); c++) {
       results.push({
@@ -263,28 +224,14 @@ export async function getSuggestions(
     return results;
   }
   
-  // Regular search
   return smartSearch(trimmed, { includeRecent: true });
 }
 
-/**
- * Truncate text for preview
- */
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength - 3) + '...';
-}
-
-/**
- * Format reference for display
- */
 export function formatReference(ref: ScriptureReference): string {
   let str = `${ref.book} ${ref.chapter}`;
   if (ref.verseStart !== null) {
     str += `:${ref.verseStart}`;
-    if (ref.verseEnd !== null) {
-      str += `-${ref.verseEnd}`;
-    }
+    if (ref.verseEnd !== null) str += `-${ref.verseEnd}`;
   }
   return str;
 }

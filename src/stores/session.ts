@@ -462,7 +462,7 @@ export const useSessionStore = create<SessionState>()(
       nextSection: () => set((state) => {
         const song = state.worship.currentSong;
         if (!song) return state;
-        const maxIndex = (song.sections?.length || 1) - 1;
+        const sections = song.lyrics.split(/\n\n+/).filter(Boolean); const maxIndex = sections.length - 1;
         return {
           worship: {
             ...state.worship,

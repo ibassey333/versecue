@@ -839,8 +839,47 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
 export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
   const addToSetlist = useSessionStore((s) => s.addToSetlist);
   const setCurrentSong = useSessionStore((s) => s.setCurrentSong);
+  const nextSection = useSessionStore((s) => s.nextSection);
+  const prevSection = useSessionStore((s) => s.prevSection);
+  const worship = useSessionStore((s) => s.worship);
   
   useWorshipDisplaySync(orgSlug);
+
+  // Keyboard shortcuts for section navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if not typing in an input/textarea
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return;
+      }
+
+      // Only work when a song is selected
+      if (!worship.currentSong) return;
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          nextSection();
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          prevSection();
+          break;
+        case ' ': // Spacebar - next section
+          e.preventDefault();
+          nextSection();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [worship.currentSong, nextSection, prevSection]);
 
   const handleSongSelect = (song: Song) => {
     addToSetlist(song);

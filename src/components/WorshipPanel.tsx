@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { 
-  Music, Search, Mic, Play, SkipForward, SkipBack, 
+  Music, Search, Mic, Play, SkipForward, SkipBack, Upload, 
   Plus, Loader2, ChevronDown, ChevronUp, X, ExternalLink,
   Edit3, Save, Check, Library
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { useSessionStore } from '@/stores/session';
 import { useWorshipDisplaySync } from '@/hooks/useWorshipDisplaySync';
 import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { Song, SongMatch } from '@/types';
+import { SongImportModal } from './SongImportModal';
 import { useOrg } from '@/contexts/OrgContext';
 
 // Helper to split lyrics into sections
@@ -27,6 +28,7 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchSource, setSearchSource] = useState<'all' | 'library' | 'lrclib'>('all');
+  const [showImportModal, setShowImportModal] = useState(false);
   const { org } = useOrg();
 
   const searchSongs = useCallback(async (searchQuery: string) => {
@@ -114,9 +116,18 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   return (
     <div className="flex flex-col rounded-xl border border-verse-border bg-verse-surface">
       <div className="px-5 py-4 border-b border-verse-border flex items-center justify-between">
-        <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
-          Find Songs
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
+            Find Songs
+          </h3>
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="p-1.5 text-verse-muted hover:text-gold-400 rounded-lg hover:bg-verse-border transition-colors"
+            title="Import songs"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+        </div>
         <select
           value={searchSource}
           onChange={(e) => setSearchSource(e.target.value as any)}
@@ -192,6 +203,14 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           </p>
         )}
       </div>
+      
+      <SongImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportComplete={(count) => {
+          console.log(`Imported ${count} songs`);
+        }}
+      />
     </div>
   );
 }

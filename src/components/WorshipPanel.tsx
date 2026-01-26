@@ -3,12 +3,19 @@
 import { useState, useCallback, useEffect } from 'react';
 import { 
   Music, Search, Mic, Play, SkipForward, SkipBack, 
-  Plus, List, Loader2, ChevronDown, ChevronUp, X, ExternalLink
+  Plus, Loader2, ChevronDown, ChevronUp, X, ExternalLink,
+  Edit3, Save, Check, Library
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
 import { useWorshipDisplaySync } from '@/hooks/useWorshipDisplaySync';
 import { Song, SongMatch } from '@/types';
+import { useOrg } from '@/contexts/OrgContext';
+
+// Helper to split lyrics into sections
+const splitLyrics = (lyrics: string): string[] => {
+  return lyrics.split(/\n\n+/).filter(Boolean);
+};
 
 // ============================================
 // Song Search Component
@@ -18,6 +25,8 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   const [results, setResults] = useState<SongMatch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchSource, setSearchSource] = useState<'all' | 'library' | 'lrclib'>('all');
+  const { org } = useOrg();
 
   const searchSongs = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
@@ -27,33 +36,60 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
 
     setIsSearching(true);
     setError(null);
+    
+    const allResults: SongMatch[] = [];
 
     try {
-      const response = await fetch(
-        `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`
-      );
-      
-      if (!response.ok) throw new Error('Search failed');
+      // Search local library first
+      if (searchSource === 'all' || searchSource === 'library') {
+        if (org?.id) {
+          const libResponse = await fetch(
+            `/api/songs?organizationId=${org.id}&q=${encodeURIComponent(searchQuery)}`
+          );
+          if (libResponse.ok) {
+            const libData = await libResponse.json();
+            const libMatches: SongMatch[] = (libData.songs || []).map((song: any) => ({
+              song: {
+                ...song,
+                createdAt: new Date(song.created_at),
+                updatedAt: new Date(song.updated_at),
+              },
+              confidence: 1,
+              source: 'local' as const,
+            }));
+            allResults.push(...libMatches);
+          }
+        }
+      }
 
-      const data = await response.json();
-      
-      const matches: SongMatch[] = data.slice(0, 8).map((item: any) => ({
-        song: {
-          id: `lrclib_${item.id}`,
-          title: item.trackName || item.name,
-          artist: item.artistName,
-          album: item.albumName,
-          lyrics: item.plainLyrics || '',
-          source: 'lrclib' as const,
-          sourceId: String(item.id),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        confidence: 1,
-        source: 'lrclib' as const,
-      }));
+      // Search LRCLib
+      if (searchSource === 'all' || searchSource === 'lrclib') {
+        const response = await fetch(
+          `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const lrcMatches: SongMatch[] = data.slice(0, 8).map((item: any) => ({
+            song: {
+              id: `lrclib_${item.id}`,
+              title: item.trackName || item.name,
+              artist: item.artistName,
+              album: item.albumName,
+              lyrics: item.plainLyrics || '',
+              source: 'lrclib' as const,
+              sourceId: String(item.id),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+            confidence: 1,
+            source: 'lrclib' as const,
+          }));
+          allResults.push(...lrcMatches);
+        }
+      }
 
-      setResults(matches);
+      setResults(allResults.slice(0, 12));
     } catch (err) {
       console.error('Song search error:', err);
       setError('Search failed. Try again.');
@@ -61,9 +97,8 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [org?.id, searchSource]);
 
-  // Debounced search
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (query.length >= 2) {
@@ -77,10 +112,19 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
 
   return (
     <div className="flex flex-col rounded-xl border border-verse-border bg-verse-surface">
-      <div className="px-5 py-4 border-b border-verse-border">
+      <div className="px-5 py-4 border-b border-verse-border flex items-center justify-between">
         <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
           Find Songs
         </h3>
+        <select
+          value={searchSource}
+          onChange={(e) => setSearchSource(e.target.value as any)}
+          className="text-xs bg-verse-bg border border-verse-border rounded-lg px-2 py-1 text-verse-muted"
+        >
+          <option value="all">All Sources</option>
+          <option value="library">My Library</option>
+          <option value="lrclib">LRCLib</option>
+        </select>
       </div>
       
       <div className="p-4 space-y-3">
@@ -112,12 +156,24 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
                 }}
                 className="w-full flex items-center gap-3 p-3 bg-verse-bg hover:bg-verse-border/50 border border-transparent hover:border-gold-500/30 rounded-lg text-left transition-all group"
               >
-                <div className="w-9 h-9 bg-gold-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Music className="w-4 h-4 text-gold-400" />
+                <div className={cn(
+                  "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
+                  match.source === 'local' ? 'bg-green-500/20' : 'bg-gold-500/20'
+                )}>
+                  {match.source === 'local' ? (
+                    <Library className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Music className="w-4 h-4 text-gold-400" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-verse-text truncate">{match.song.title}</p>
-                  <p className="text-xs text-verse-muted truncate">{match.song.artist}</p>
+                  <p className="text-xs text-verse-muted truncate">
+                    {match.song.artist}
+                    {match.source === 'local' && (
+                      <span className="ml-2 text-green-400">• Library</span>
+                    )}
+                  </p>
                 </div>
                 <Plus className="w-4 h-4 text-verse-muted group-hover:text-gold-400 transition-colors" />
               </button>
@@ -177,14 +233,9 @@ function SetlistQueue() {
       {isExpanded && (
         <div className="p-4">
           {queue.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-3xl mb-3 opacity-50">🎵</div>
-              <p className="text-sm text-verse-muted">
-                No songs in setlist
-              </p>
-              <p className="text-xs text-verse-subtle mt-1">
-                Search above to add songs
-              </p>
+            <div className="text-center py-6">
+              <div className="text-2xl mb-2 opacity-50">🎵</div>
+              <p className="text-sm text-verse-muted">No songs in setlist</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -203,9 +254,6 @@ function SetlistQueue() {
                     <p className="text-sm font-medium text-verse-text truncate">
                       {item.song?.title || 'Unknown'}
                     </p>
-                    <p className="text-xs text-verse-muted truncate">
-                      {item.song?.artist || 'Unknown'}
-                    </p>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -216,14 +264,12 @@ function SetlistQueue() {
                           ? 'text-gold-400 bg-gold-500/20'
                           : 'text-verse-muted hover:text-verse-text hover:bg-verse-border'
                       )}
-                      title="Display"
                     >
                       <Play className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => removeFromSetlist(item.song?.id || '')}
                       className="p-2 rounded-lg text-verse-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Remove"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -239,15 +285,76 @@ function SetlistQueue() {
 }
 
 // ============================================
-// Ready to Display (Song Sections)
+// Enhanced Ready to Display (Full Lyrics View)
 // ============================================
 function ReadyToDisplay() {
+  const { org } = useOrg();
   const worship = useSessionStore((s) => s.worship);
   const goToSection = useSessionStore((s) => s.goToSection);
   const setCurrentSong = useSessionStore((s) => s.setCurrentSong);
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedLyrics, setEditedLyrics] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const song = worship.currentSong;
   const currentIndex = worship.currentSectionIndex;
+
+  // Initialize edited lyrics when song changes
+  useEffect(() => {
+    if (song) {
+      setEditedLyrics(song.lyrics);
+      setIsEditing(false);
+    }
+  }, [song?.id]);
+
+  // Parse lyrics into sections
+  const lyrics = isEditing ? editedLyrics : (song?.lyrics || '');
+  const sections = splitLyrics(lyrics);
+
+  // Save to library
+  const handleSave = async () => {
+    if (!song || !org?.id) return;
+    
+    setIsSaving(true);
+    setSaveSuccess(false);
+    
+    try {
+      const response = await fetch('/api/songs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          lyrics: editedLyrics,
+          source: song.source,
+          sourceId: song.sourceId,
+          organizationId: org.id,
+        }),
+      });
+      
+      if (response.ok) {
+        setSaveSuccess(true);
+        setCurrentSong({ ...song, lyrics: editedLyrics });
+        setIsEditing(false);
+        setTimeout(() => setSaveSuccess(false), 2000);
+      }
+    } catch (err) {
+      console.error('Save error:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Apply edits without saving
+  const handleApplyEdits = () => {
+    if (song) {
+      setCurrentSong({ ...song, lyrics: editedLyrics });
+      setIsEditing(false);
+    }
+  };
 
   if (!song) {
     return (
@@ -259,88 +366,157 @@ function ReadyToDisplay() {
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
           <div className="text-5xl mb-4 opacity-40">📋</div>
-          <p className="text-verse-muted text-sm">Song sections appear here</p>
+          <p className="text-verse-muted text-sm">No song selected</p>
           <p className="text-verse-subtle text-xs mt-1">Search and select a song to get started</p>
         </div>
       </div>
     );
   }
 
-  // Split lyrics into sections
-  const sections = song.lyrics.split(/\n\n+/).filter(Boolean);
-
   return (
     <div className="flex flex-col rounded-xl border border-verse-border bg-verse-surface h-full">
-      <div className="px-5 py-4 border-b border-verse-border flex items-center justify-between">
-        <div>
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-verse-border">
+        <div className="flex items-center justify-between mb-1">
           <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
-            Ready to Display
+            {isEditing ? 'Editing' : 'Ready to Display'}
           </h3>
-          <p className="text-xs text-verse-muted mt-0.5">{song.title} - {song.artist}</p>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <button
+                  onClick={() => {
+                    setEditedLyrics(song.lyrics);
+                    setIsEditing(false);
+                  }}
+                  className="px-3 py-1.5 text-xs text-verse-muted hover:text-verse-text rounded-lg hover:bg-verse-border transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApplyEdits}
+                  className="px-3 py-1.5 text-xs text-gold-400 hover:text-gold-300 rounded-lg hover:bg-gold-500/10 transition-colors"
+                >
+                  Apply
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gold-500 text-verse-bg rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : saveSuccess ? (
+                    <Check className="w-3 h-3" />
+                  ) : (
+                    <Save className="w-3 h-3" />
+                  )}
+                  {saveSuccess ? 'Saved!' : 'Save to Library'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-verse-muted hover:text-verse-text rounded-lg hover:bg-verse-border transition-colors"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  Edit
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-verse-muted hover:text-verse-text rounded-lg hover:bg-verse-border transition-colors disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : saveSuccess ? (
+                    <Check className="w-3 h-3 text-green-400" />
+                  ) : (
+                    <Library className="w-3 h-3" />
+                  )}
+                  {saveSuccess ? 'Saved!' : 'Save'}
+                </button>
+                <button
+                  onClick={() => setCurrentSong(null)}
+                  className="p-1.5 text-verse-muted hover:text-verse-text rounded-lg hover:bg-verse-border transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        <button
-          onClick={() => setCurrentSong(null)}
-          className="p-2 rounded-lg text-verse-muted hover:text-verse-text hover:bg-verse-border transition-colors"
-          title="Clear"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <p className="text-xs text-verse-muted">{song.title} - {song.artist}</p>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {sections.map((section: string, index: number) => {
-          const isActive = index === currentIndex;
-          const firstLine = section.split('\n')[0].substring(0, 40);
-          
-          return (
-            <button
-              key={index}
-              onClick={() => goToSection(index)}
-              className={cn(
-                'w-full text-left p-4 rounded-lg border transition-all',
-                isActive
-                  ? 'bg-gold-500/10 border-gold-500 shadow-lg shadow-gold-500/10'
-                  : 'bg-verse-bg border-verse-border hover:border-gold-500/30 hover:bg-verse-elevated'
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <span className={cn(
-                  'flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold',
-                  isActive ? 'bg-gold-500 text-verse-bg' : 'bg-verse-border text-verse-muted'
-                )}>
-                  {index + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className={cn(
-                    'text-sm font-medium truncate',
-                    isActive ? 'text-gold-400' : 'text-verse-text'
-                  )}>
-                    {firstLine}{firstLine.length >= 40 ? '...' : ''}
-                  </p>
-                  <p className="text-xs text-verse-muted">
-                    {section.split('\n').length} lines
-                  </p>
-                </div>
-                {isActive && (
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-gold-500 text-verse-bg font-medium">
-                    LIVE
-                  </span>
-                )}
-              </div>
-            </button>
-          );
-        })}
+      {/* Lyrics Area */}
+      <div className="flex-1 overflow-y-auto p-4 max-h-[calc(100vh-300px)]">
+        {isEditing ? (
+          <textarea
+            value={editedLyrics}
+            onChange={(e) => setEditedLyrics(e.target.value)}
+            className="w-full h-full min-h-[400px] bg-verse-bg border border-verse-border rounded-lg p-4 text-verse-text text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-gold-500/50"
+            placeholder="Enter lyrics... Separate sections with blank lines."
+          />
+        ) : (
+          <div className="space-y-3">
+            {sections.map((section: string, index: number) => {
+              const isActive = index === currentIndex;
+              const lineCount = section.split('\n').length;
+              
+              return (
+                <button
+                  key={index}
+                  onClick={() => goToSection(index)}
+                  className={cn(
+                    'w-full text-left p-4 rounded-xl border-2 transition-all',
+                    isActive
+                      ? 'bg-gold-500/10 border-gold-500 shadow-lg shadow-gold-500/10'
+                      : 'bg-verse-bg border-transparent hover:border-verse-border hover:bg-verse-elevated'
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={cn(
+                      'flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold flex-shrink-0 mt-0.5',
+                      isActive ? 'bg-gold-500 text-verse-bg' : 'bg-verse-border text-verse-muted'
+                    )}>
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <pre className={cn(
+                        'text-sm leading-relaxed whitespace-pre-wrap font-sans',
+                        isActive ? 'text-verse-text' : 'text-verse-muted'
+                      )}>
+                        {section}
+                      </pre>
+                    </div>
+                    {isActive && (
+                      <span className="text-[10px] px-2 py-1 rounded-full bg-gold-500 text-verse-bg font-bold flex-shrink-0">
+                        LIVE
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       
-      <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50">
-        <span className="text-xs text-verse-subtle">{sections.length} sections</span>
-      </div>
+      {/* Footer */}
+      {!isEditing && (
+        <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50 flex items-center justify-between">
+          <span className="text-xs text-verse-subtle">{sections.length} sections</span>
+          <span className="text-xs text-verse-muted">Click a section to display</span>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============================================
-// Lyrics Preview (Like LIVE PREVIEW)
+// Lyrics Preview
 // ============================================
 function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
   const worship = useSessionStore((s) => s.worship);
@@ -350,8 +526,7 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
   const song = worship.currentSong;
   const sectionIndex = worship.currentSectionIndex;
 
-  // Split lyrics into sections
-  const sections = song ? song.lyrics.split(/\n\n+/).filter(Boolean) : [];
+  const sections = song ? splitLyrics(song.lyrics) : [];
   const currentSection = sections[sectionIndex] || '';
   const totalSections = sections.length;
 
@@ -373,48 +548,42 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
         )}
       </div>
       
-      {/* Preview Area */}
       <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
         {song ? (
-          <div className="text-center px-8 py-6 max-h-full overflow-hidden">
-            <h2 className="text-gold-400 font-bold text-lg mb-4">{song.title}</h2>
-            <pre className="text-white text-sm leading-relaxed whitespace-pre-wrap font-sans">
+          <div className="text-center px-6 py-4 max-h-full overflow-hidden">
+            <h2 className="text-gold-400 font-bold text-base mb-3">{song.title}</h2>
+            <pre className="text-white text-xs leading-relaxed whitespace-pre-wrap font-sans">
               {currentSection}
             </pre>
           </div>
         ) : (
           <div className="text-center">
-            <div className="w-12 h-12 bg-verse-border/50 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Music className="w-6 h-6 text-verse-muted" />
-            </div>
-            <p className="text-verse-muted text-sm">No song displayed</p>
+            <Music className="w-8 h-8 text-verse-muted mx-auto mb-2" />
+            <p className="text-verse-muted text-xs">No song displayed</p>
           </div>
         )}
       </div>
       
-      {/* Navigation */}
       {song && (
         <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50 flex items-center justify-between">
           <button
             onClick={prevSection}
             disabled={sectionIndex === 0}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-verse-muted hover:text-verse-text disabled:opacity-30 disabled:cursor-not-allowed rounded-lg hover:bg-verse-border transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-verse-muted hover:text-verse-text disabled:opacity-30 rounded transition-colors"
           >
-            <SkipBack className="w-4 h-4" />
-            <span className="hidden sm:inline">Prev</span>
+            <SkipBack className="w-3 h-3" />
+            Prev
           </button>
-          
-          <span className="text-sm font-medium text-verse-text">
-            {sectionIndex + 1} <span className="text-verse-muted">/ {totalSections}</span>
+          <span className="text-xs font-medium text-verse-text">
+            {sectionIndex + 1} / {totalSections}
           </span>
-          
           <button
             onClick={nextSection}
             disabled={sectionIndex >= totalSections - 1}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-verse-muted hover:text-verse-text disabled:opacity-30 disabled:cursor-not-allowed rounded-lg hover:bg-verse-border transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-verse-muted hover:text-verse-text disabled:opacity-30 rounded transition-colors"
           >
-            <span className="hidden sm:inline">Next</span>
-            <SkipForward className="w-4 h-4" />
+            Next
+            <SkipForward className="w-3 h-3" />
           </button>
         </div>
       )}
@@ -430,7 +599,7 @@ function WorshipStats() {
   
   const songsInQueue = worship.setlistQueue.length;
   const currentSong = worship.currentSong;
-  const sections = currentSong ? currentSong.lyrics.split(/\n\n+/).filter(Boolean).length : 0;
+  const sections = currentSong ? splitLyrics(currentSong.lyrics).length : 0;
   
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface p-5">
@@ -517,7 +686,6 @@ export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
   const addToSetlist = useSessionStore((s) => s.addToSetlist);
   const setCurrentSong = useSessionStore((s) => s.setCurrentSong);
   
-  // Sync worship display to projector
   useWorshipDisplaySync(orgSlug);
 
   const handleSongSelect = (song: Song) => {
@@ -527,19 +695,19 @@ export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
 
   return (
     <div className="grid grid-cols-12 gap-6">
-      {/* Left Column: Search + Setlist + Detection */}
-      <div className="col-span-12 lg:col-span-4 space-y-4">
+      {/* Left Column */}
+      <div className="col-span-12 lg:col-span-3 space-y-4">
         <SongSearch onSelect={handleSongSelect} />
         <SetlistQueue />
         <DetectionPanel />
       </div>
 
-      {/* Middle Column: Ready to Display */}
-      <div className="col-span-12 lg:col-span-4">
+      {/* Middle Column - Wider for full lyrics */}
+      <div className="col-span-12 lg:col-span-5">
         <ReadyToDisplay />
       </div>
 
-      {/* Right Column: Preview + Stats */}
+      {/* Right Column */}
       <div className="col-span-12 lg:col-span-4 space-y-4">
         <LyricsPreview orgSlug={orgSlug} />
         <WorshipStats />

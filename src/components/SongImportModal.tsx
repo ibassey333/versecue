@@ -33,7 +33,7 @@ export function SongImportModal({ isOpen, onClose, onImportComplete }: ImportMod
   // Parse files in batches to avoid UI freeze
   const handleFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files).filter(f => 
-      f.name.match(/\.(pro|pro5|pro6|pro7|xml|txt|usr|cho|chopro|chordpro)$/i)
+      f.name.match(/\.(pro|pro5|pro6|pro7|xml|txt|usr|cho|chopro|chordpro|json)$/i)
     );
     
     if (fileArray.length === 0) {
@@ -256,7 +256,7 @@ export function SongImportModal({ isOpen, onClose, onImportComplete }: ImportMod
                     <input
                       type="file"
                       multiple
-                      accept=".pro,.pro5,.pro6,.pro7,.xml,.txt,.usr,.cho,.chopro,.chordpro"
+                      accept=".pro,.pro5,.pro6,.pro7,.xml,.txt,.usr,.cho,.chopro,.chordpro,.json"
                       onChange={handleFileInput}
                       className="hidden"
                       id="file-upload"
@@ -291,7 +291,7 @@ export function SongImportModal({ isOpen, onClose, onImportComplete }: ImportMod
                   <div className="mt-6 pt-6 border-t border-verse-border">
                     <p className="text-xs text-verse-subtle mb-2">Supported formats:</p>
                     <div className="flex flex-wrap justify-center gap-2">
-                      {['ProPresenter', 'OpenSong', 'CCLI', 'ChordPro', 'Plain Text'].map((fmt) => (
+                      {['ProPresenter', 'OpenSong', 'CCLI', 'ChordPro', 'JSON', 'Plain Text'].map((fmt) => (
                         <span key={fmt} className="px-2 py-1 bg-verse-bg text-verse-muted text-xs rounded">
                           {fmt}
                         </span>
@@ -407,6 +407,18 @@ export function SongImportModal({ isOpen, onClose, onImportComplete }: ImportMod
                   <p className="text-verse-muted mb-4">
                     {importResult.imported.toLocaleString()} song{importResult.imported !== 1 ? 's' : ''} imported
                     {importResult.skipped > 0 && `, ${importResult.skipped.toLocaleString()} skipped (duplicates)`}
+                  </p>
+                </>
+              ) : importResult.skipped > 0 ? (
+                <>
+                  <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertCircle className="w-8 h-8 text-yellow-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-verse-text mb-2">
+                    Already in Library
+                  </h3>
+                  <p className="text-verse-muted mb-4">
+                    {importResult.skipped.toLocaleString()} song{importResult.skipped !== 1 ? 's' : ''} skipped (already exist)
                   </p>
                 </>
               ) : (

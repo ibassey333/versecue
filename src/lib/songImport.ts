@@ -379,6 +379,67 @@ function extractTextFromRTF(rtf: string): string {
   return text;
 }
 
+
+// ============================================
+// JSON Parser (.json)
+// ============================================
+export function parseJSON(content: string, filename: string): ParsedSong[] {
+  try {
+    const data = JSON.parse(content);
+    
+    // Handle array format: [{ title, artist, lyrics }, ...]
+    if (Array.isArray(data)) {
+      return data
+        .filter((song: any) => song.title && song.lyrics)
+        .map((song: any) => ({
+          title: song.title,
+          artist: song.artist || 'Unknown',
+          lyrics: song.lyrics,
+          copyright: song.copyright,
+          ccliNumber: song.ccliNumber || song.ccli,
+          key: song.key,
+          tempo: song.tempo,
+          tags: song.tags,
+        }));
+    }
+    
+    // Handle object with songs array: { songs: [...] }
+    if (data.songs && Array.isArray(data.songs)) {
+      return data.songs
+        .filter((song: any) => song.title && song.lyrics)
+        .map((song: any) => ({
+          title: song.title,
+          artist: song.artist || 'Unknown',
+          lyrics: song.lyrics,
+          copyright: song.copyright,
+          ccliNumber: song.ccliNumber || song.ccli,
+          key: song.key,
+          tempo: song.tempo,
+          tags: song.tags,
+        }));
+    }
+    
+    // Handle single song object: { title, artist, lyrics }
+    if (data.title && data.lyrics) {
+      return [{
+        title: data.title,
+        artist: data.artist || 'Unknown',
+        lyrics: data.lyrics,
+        copyright: data.copyright,
+        ccliNumber: data.ccliNumber || data.ccli,
+        key: data.key,
+        tempo: data.tempo,
+        tags: data.tags,
+      }];
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('JSON parse error:', error);
+    return [];
+  }
+}
+
 // ============================================
 // Main Import Function
 // ============================================
@@ -431,6 +492,20 @@ export async function importSongFile(file: File): Promise<ImportResult> {
         if (!parsed || !parsed.lyrics) {
           parsed = parsePlainText(content, filename);
         }
+        break;
+      
+      case 'json':
+        format = 'JSON';
+        const jsonSongs = parseJSON(content, filename);
+        if (jsonSongs.length > 0) {
+          return {
+            success: true,
+            songs: jsonSongs,
+            errors: [],
+            format: 'JSON',
+          };
+        }
+        errors.push(`Could not parse JSON file: ${filename}`);
         break;
         
       default:

@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
 import { useWorshipDisplaySync } from '@/hooks/useWorshipDisplaySync';
+import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { Song, SongMatch } from '@/types';
 import { useOrg } from '@/contexts/OrgContext';
 
@@ -625,54 +626,188 @@ function WorshipStats() {
 }
 
 // ============================================
-// Detection Panel
+// Detection Panel with AI
 // ============================================
-function DetectionPanel() {
-  const worship = useSessionStore((s) => s.worship);
-  const setDetecting = useSessionStore((s) => s.setDetecting);
+const AUTO_STOP_OPTIONS = [
+  { value: 10, label: '10s' },
+  { value: 20, label: '20s' },
+  { value: 30, label: '30s' },
+  { value: 40, label: '40s' },
+  { value: 0, label: 'Manual' },
+];
+
+function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }) {
+  const [autoStopSeconds, setAutoStopSeconds] = useState<number>(25);
+  
+  const {
+    status,
+    transcribedText,
+    identifiedSong,
+    matches,
+    error,
+    isRecording,
+    isProcessing,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    reset,
+  } = useWorshipDetection({ autoStopSeconds: autoStopSeconds || null });
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
+
+  const statusMessages: Record<string, string> = {
+    idle: 'Ready to detect',
+    recording: 'Listening... Sing clearly!',
+    transcribing: 'Transcribing audio...',
+    identifying: 'Identifying song...',
+    searching: 'Fetching lyrics...',
+    complete: identifiedSong ? `Found: ${identifiedSong.title}` : 'Detection complete',
+    error: error || 'Something went wrong',
+  };
 
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
-      <div className="px-5 py-4 border-b border-verse-border">
+      <div className="px-5 py-4 border-b border-verse-border flex items-center justify-between">
         <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
           Song Detection
         </h3>
+        {status !== 'idle' && (
+          <button
+            onClick={reset}
+            className="text-xs text-verse-muted hover:text-verse-text"
+          >
+            Reset
+          </button>
+        )}
       </div>
       
       <div className="p-5">
+        {/* Auto-stop Setting */}
+        {status === 'idle' && (
+          <div className="flex items-center justify-between mb-4 p-2 bg-verse-bg rounded-lg">
+            <span className="text-xs text-verse-muted">Auto-stop:</span>
+            <div className="flex gap-1">
+              {AUTO_STOP_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setAutoStopSeconds(opt.value)}
+                  className={cn(
+                    'px-2 py-1 text-xs rounded transition-colors',
+                    autoStopSeconds === opt.value
+                      ? 'bg-gold-500 text-verse-bg font-medium'
+                      : 'text-verse-muted hover:text-verse-text hover:bg-verse-border'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Status Indicator */}
         <div className="flex items-center gap-3 mb-4">
           <div className={cn(
-            'w-10 h-10 rounded-full flex items-center justify-center transition-all',
-            worship.isDetecting 
-              ? 'bg-gold-500 animate-pulse shadow-lg shadow-gold-500/30' 
-              : 'bg-verse-border'
+            'w-10 h-10 rounded-full flex items-center justify-center transition-all relative',
+            isRecording 
+              ? 'bg-red-500 animate-pulse shadow-lg shadow-red-500/30'
+              : isProcessing
+                ? 'bg-gold-500 animate-pulse shadow-lg shadow-gold-500/30' 
+                : status === 'complete'
+                  ? 'bg-green-500'
+                  : status === 'error'
+                    ? 'bg-red-500/50'
+                    : 'bg-verse-border'
           )}>
-            <Mic className={cn('w-5 h-5', worship.isDetecting ? 'text-verse-bg' : 'text-verse-muted')} />
+            <Mic className={cn(
+              'w-5 h-5',
+              (isRecording || isProcessing || status === 'complete') ? 'text-white' : 'text-verse-muted'
+            )} />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-medium text-verse-text">
-              {worship.isDetecting ? 'Listening...' : 'Ready to detect'}
+              {statusMessages[status]}
             </p>
-            <p className="text-xs text-verse-muted">
-              Identify songs automatically
-            </p>
+            {isRecording && (
+              <p className="text-xs text-verse-muted">
+                {recordingTime}s {autoStopSeconds ? `/ ${autoStopSeconds}s` : ''}
+              </p>
+            )}
+            {identifiedSong && (
+              <p className="text-xs text-verse-muted">
+                {identifiedSong.artist} • {identifiedSong.confidence} confidence
+              </p>
+            )}
           </div>
         </div>
 
+        {/* Transcribed Text */}
+        {transcribedText && (
+          <div className="mb-4 p-3 bg-verse-bg rounded-lg">
+            <p className="text-[10px] text-verse-subtle uppercase tracking-wide mb-1">Heard:</p>
+            <p className="text-xs text-verse-muted italic line-clamp-4 max-h-20 overflow-y-auto">"{transcribedText}"</p>
+          </div>
+        )}
+
+        {/* Match Results */}
+        {matches.length > 0 && (
+          <div className="mb-4 space-y-2 max-h-[200px] overflow-y-auto">
+            <p className="text-[10px] text-verse-subtle uppercase tracking-wide">Select a match:</p>
+            {matches.map((match) => (
+              <button
+                key={match.song.id}
+                onClick={() => {
+                  onSongSelect(match.song);
+                  reset();
+                }}
+                className="w-full flex items-center gap-3 p-3 bg-verse-bg hover:bg-verse-border/50 border border-verse-border hover:border-gold-500/30 rounded-lg text-left transition-all"
+              >
+                <Music className="w-4 h-4 text-gold-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-verse-text truncate">{match.song.title}</p>
+                  <p className="text-xs text-verse-muted truncate">{match.song.artist}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Error State */}
+        {status === 'error' && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <p className="text-xs text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Action Button */}
         <button
-          onClick={() => setDetecting(!worship.isDetecting)}
+          onClick={handleToggleRecording}
+          disabled={isProcessing}
           className={cn(
-            'w-full py-3 rounded-xl font-semibold transition-all',
-            worship.isDetecting
+            'w-full py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed',
+            isRecording
               ? 'bg-red-500 text-white hover:bg-red-600'
               : 'bg-gold-500 text-verse-bg hover:bg-gold-400 shadow-lg shadow-gold-500/20'
           )}
         >
-          {worship.isDetecting ? 'Stop Detecting' : 'Detect Song'}
+          {isProcessing 
+            ? 'Processing...' 
+            : isRecording 
+              ? 'Stop & Identify' 
+              : status === 'complete' || status === 'error'
+                ? 'Try Again'
+                : 'Start Detecting'
+          }
         </button>
 
         <p className="text-[10px] text-verse-subtle text-center mt-3">
-          🎵 AI detection coming in next update
+          🎵 Sing clearly • Tap stop anytime or let it auto-stop
         </p>
       </div>
     </div>
@@ -699,7 +834,7 @@ export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
       <div className="col-span-12 lg:col-span-3 space-y-4">
         <SongSearch onSelect={handleSongSelect} />
         <SetlistQueue />
-        <DetectionPanel />
+        <DetectionPanel onSongSelect={handleSongSelect} />
       </div>
 
       {/* Middle Column - Wider for full lyrics */}

@@ -56,7 +56,7 @@ export function ControlsBar({
       <div className="max-w-[1800px] mx-auto px-4 sm:px-6 py-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 sm:gap-3">
-            {!isListening ? (
+            {currentMode !== "worship" && (<>{!isListening ? (
               <button
                 onClick={onStartListening}
                 className="flex items-center gap-2 px-4 sm:px-5 py-2.5 bg-gold-500 text-verse-bg font-semibold rounded-xl hover:bg-gold-400 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-gold-500/20"
@@ -106,7 +106,7 @@ export function ControlsBar({
             >
               <RotateCcw className="w-4 h-4" />
               <span className="hidden sm:inline">New Session</span>
-            </button>
+            </button></>)}
             
             {/* Mode Toggle */}
             {onModeChange && (
@@ -151,7 +151,7 @@ export function ControlsBar({
               </button>
             )}
             
-            <div className="relative" ref={translationRef}>
+            {currentMode !== "worship" && (<div className="relative" ref={translationRef}>
               <button
                 onClick={() => setShowTranslations(!showTranslations)}
                 onBlur={handleTranslationBlur}
@@ -183,7 +183,7 @@ export function ControlsBar({
                   ))}
                 </div>
               )}
-            </div>
+            </div>)}
 
             <div className="w-px h-6 bg-verse-border hidden sm:block" />
 

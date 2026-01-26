@@ -15,7 +15,26 @@ interface SessionSettings {
   enableGroqDetection: boolean; // NEW - off by default
 }
 
+// ============================================
+// Worship Mode State
+// ============================================
+type AppMode = 'sermon' | 'worship';
+
+interface WorshipState {
+  currentSong: any | null; // Will be Song type
+  currentSectionIndex: number;
+  setlistQueue: any[]; // Will be SetlistItem[]
+  isDetecting: boolean;
+  detectionResults: any[]; // Will be SongMatch[]
+}
+
 interface SessionState {
+  // App Mode
+  mode: AppMode;
+  
+  // Worship State
+  worship: WorshipState;
+  
   // Audio
   isListening: boolean;
   isPaused: boolean;
@@ -70,6 +89,22 @@ interface SessionState {
   changeDisplayTranslation: (translation: string) => Promise<void>;
   
   newSession: () => void;
+  
+  // Mode Actions
+  setMode: (mode: AppMode) => void;
+  toggleMode: () => void;
+  
+  // Worship Actions
+  setCurrentSong: (song: any | null) => void;
+  nextSection: () => void;
+  prevSection: () => void;
+  goToSection: (index: number) => void;
+  addToSetlist: (song: any) => void;
+  removeFromSetlist: (songId: string) => void;
+  reorderSetlist: (fromIndex: number, toIndex: number) => void;
+  clearSetlist: () => void;
+  setDetecting: (isDetecting: boolean) => void;
+  setDetectionResults: (results: any[]) => void;
 }
 
 const DEFAULT_SETTINGS: SessionSettings = {
@@ -85,6 +120,14 @@ const DEFAULT_STATS: SessionStats = {
   approved: 0,
   displayed: 0,
   dismissed: 0,
+};
+
+const DEFAULT_WORSHIP_STATE: WorshipState = {
+  currentSong: null,
+  currentSectionIndex: 0,
+  setlistQueue: [],
+  isDetecting: false,
+  detectionResults: [],
 };
 
 // Split verse helper - threshold = max words per part before splitting
@@ -153,6 +196,8 @@ export const useSessionStore = create<SessionState>()(
   persist(
     (set, get) => ({
       // Initial state
+      mode: 'sermon' as AppMode,
+      worship: DEFAULT_WORSHIP_STATE,
       isListening: false,
       isPaused: false,
       audioLevel: 0,
@@ -396,13 +441,108 @@ export const useSessionStore = create<SessionState>()(
         stats: DEFAULT_STATS,
         isListening: false,
         isPaused: false,
+        worship: DEFAULT_WORSHIP_STATE,
       }),
+      
+      // Mode Actions
+      setMode: (mode) => set({ mode }),
+      toggleMode: () => set((state) => ({ 
+        mode: state.mode === 'sermon' ? 'worship' : 'sermon' 
+      })),
+      
+      // Worship Actions
+      setCurrentSong: (song) => set((state) => ({
+        worship: { 
+          ...state.worship, 
+          currentSong: song,
+          currentSectionIndex: 0,
+        }
+      })),
+      
+      nextSection: () => set((state) => {
+        const song = state.worship.currentSong;
+        if (!song) return state;
+        const maxIndex = (song.sections?.length || 1) - 1;
+        return {
+          worship: {
+            ...state.worship,
+            currentSectionIndex: Math.min(state.worship.currentSectionIndex + 1, maxIndex),
+          }
+        };
+      }),
+      
+      prevSection: () => set((state) => ({
+        worship: {
+          ...state.worship,
+          currentSectionIndex: Math.max(state.worship.currentSectionIndex - 1, 0),
+        }
+      })),
+      
+      goToSection: (index) => set((state) => ({
+        worship: {
+          ...state.worship,
+          currentSectionIndex: index,
+        }
+      })),
+      
+      addToSetlist: (song) => set((state) => ({
+        worship: {
+          ...state.worship,
+          setlistQueue: [...state.worship.setlistQueue, {
+            id: `setlist_${Date.now()}`,
+            songId: song.id,
+            song,
+            order: state.worship.setlistQueue.length,
+          }],
+        }
+      })),
+      
+      removeFromSetlist: (songId) => set((state) => ({
+        worship: {
+          ...state.worship,
+          setlistQueue: state.worship.setlistQueue.filter(item => item.songId !== songId),
+        }
+      })),
+      
+      reorderSetlist: (fromIndex, toIndex) => set((state) => {
+        const newQueue = [...state.worship.setlistQueue];
+        const [moved] = newQueue.splice(fromIndex, 1);
+        newQueue.splice(toIndex, 0, moved);
+        return {
+          worship: {
+            ...state.worship,
+            setlistQueue: newQueue.map((item, i) => ({ ...item, order: i })),
+          }
+        };
+      }),
+      
+      clearSetlist: () => set((state) => ({
+        worship: {
+          ...state.worship,
+          setlistQueue: [],
+        }
+      })),
+      
+      setDetecting: (isDetecting) => set((state) => ({
+        worship: {
+          ...state.worship,
+          isDetecting,
+        }
+      })),
+      
+      setDetectionResults: (results) => set((state) => ({
+        worship: {
+          ...state.worship,
+          detectionResults: results,
+        }
+      })),
     }),
     {
       name: 'versecue-session',
       partialize: (state) => ({
         settings: state.settings,
         selectedAudioDevice: state.selectedAudioDevice,
+        mode: state.mode,
       }),
     }
   )

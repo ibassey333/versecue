@@ -96,3 +96,80 @@ export interface SessionStats {
   displayed: number;
   dismissed: number;
 }
+
+
+// ============================================
+// Worship Mode Types
+// ============================================
+
+export type AppMode = 'sermon' | 'worship';
+
+export interface Song {
+  id: string;
+  title: string;
+  artist: string;
+  album?: string;
+  lyrics: string;
+  sections?: SongSection[];
+  source: 'local' | 'lrclib' | 'ccli' | 'custom';
+  sourceId?: string; // ID from external source
+  organizationId?: string;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  isFavorite?: boolean;
+  tags?: string[];
+}
+
+export interface SongSection {
+  type: 'verse' | 'chorus' | 'bridge' | 'pre-chorus' | 'outro' | 'intro' | 'tag' | 'other';
+  label: string; // "Verse 1", "Chorus", etc.
+  lyrics: string;
+  order: number;
+}
+
+export interface SongMatch {
+  song: Song;
+  confidence: number;
+  matchedLyrics?: string;
+  source: 'local' | 'lrclib' | 'ccli' | 'custom';
+}
+
+export interface SetlistItem {
+  id: string;
+  songId: string;
+  song?: Song;
+  order: number;
+  notes?: string;
+}
+
+export interface Setlist {
+  id: string;
+  name: string;
+  description?: string;
+  items: SetlistItem[];
+  organizationId: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  serviceDate?: Date;
+}
+
+export interface WorshipDisplayState {
+  mode: 'waiting' | 'displaying' | 'detecting';
+  currentSong: Song | null;
+  currentSection: number;
+  totalSections: number;
+}
+
+export interface LRCLibSearchResult {
+  id: number;
+  name: string;
+  trackName: string;
+  artistName: string;
+  albumName?: string;
+  duration?: number;
+  instrumental: boolean;
+  plainLyrics?: string;
+  syncedLyrics?: string;
+}

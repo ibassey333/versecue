@@ -21,6 +21,7 @@ import { getEnabledTranslations } from '@/config/translations';
 import { ControlsBar, SettingsDrawer } from '@/components/dashboard-ui';
 import { parseScriptures } from '@/lib/detection/parser';
 import { SmartScriptureSearch } from '@/components/SmartScriptureSearch';
+import { WorshipPanel } from '@/components/WorshipPanel';
 
 // ============================================
 // API Status Component
@@ -1007,6 +1008,10 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
   const currentPart = useSessionStore((s) => s.currentPart);
   const totalParts = useSessionStore((s) => s.totalParts);
+  
+  // Worship mode
+  const mode = useSessionStore((s) => s.mode);
+  const setMode = useSessionStore((s) => s.setMode);
   const verseParts = useSessionStore((s) => s.verseParts);
   
   useEffect(() => {
@@ -1125,6 +1130,8 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
         onOpenSettings={() => setShowSettings(true)}
         showSaveNotes={transcript.length > 0}
         onSaveNotes={() => setShowEndSession(true)}
+        mode={mode}
+        onModeChange={setMode}
       />
       
 
@@ -1132,32 +1139,37 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
       {/* Main Content */}
       <main className="max-w-[1800px] mx-auto px-6 py-6">
         
-        {/* New Layout: 3 columns */}
-        <div className="grid grid-cols-12 gap-6">
-          {/* Left Column: Transcript + Search + Needs Review */}
-          <div className="col-span-12 lg:col-span-4 space-y-4">
-            <TranscriptPanel speechProvider={activeSpeechProvider} className="h-[400px]" />
-            <SmartScriptureSearch 
-              onSelect={handleManualSearch}
-              aiEnabled={settings.enableGroqDetection}
-              placeholder="Type book, reference, or verse text..."
-            />
-            <NeedsReview />
+        {mode === 'worship' ? (
+          /* Worship Mode UI */
+          <WorshipPanel orgSlug={orgSlug} />
+        ) : (
+          /* Sermon Mode UI (existing) */
+          <div className="grid grid-cols-12 gap-6">
+            {/* Left Column: Transcript + Search + Needs Review */}
+            <div className="col-span-12 lg:col-span-4 space-y-4">
+              <TranscriptPanel speechProvider={activeSpeechProvider} className="h-[400px]" />
+              <SmartScriptureSearch 
+                onSelect={handleManualSearch}
+                aiEnabled={settings.enableGroqDetection}
+                placeholder="Type book, reference, or verse text..."
+              />
+              <NeedsReview />
+            </div>
+            
+            {/* Middle Column: Ready to Display (full height) */}
+            <div className="col-span-12 lg:col-span-4">
+              <ReadyToDisplay className="h-full max-h-[calc(100vh-250px)] overflow-y-auto" splitThreshold={splitThreshold} />
+            </div>
+            
+            {/* Right Column: Display + Translation + Stats + Log */}
+            <div className="col-span-12 lg:col-span-4 space-y-4">
+              <DisplayPreview orgSlug={orgSlug} splitThreshold={splitThreshold} displaySettings={displaySettings} />
+              <TranslationSelector />
+              <SessionStats />
+              <SessionLog />
+            </div>
           </div>
-          
-          {/* Middle Column: Ready to Display (full height) */}
-          <div className="col-span-12 lg:col-span-4">
-            <ReadyToDisplay className="h-full max-h-[calc(100vh-250px)] overflow-y-auto" splitThreshold={splitThreshold} />
-          </div>
-          
-          {/* Right Column: Display + Translation + Stats + Log */}
-          <div className="col-span-12 lg:col-span-4 space-y-4">
-            <DisplayPreview orgSlug={orgSlug} splitThreshold={splitThreshold} displaySettings={displaySettings} />
-            <TranslationSelector />
-            <SessionStats />
-            <SessionLog />
-          </div>
-        </div>
+        )}
       </main>
       
       {/* Footer */}

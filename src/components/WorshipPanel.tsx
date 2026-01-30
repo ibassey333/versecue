@@ -5,13 +5,14 @@ import {
   Music, Search, Mic, Play, SkipForward, SkipBack, Upload, 
   Plus, Loader2, ChevronDown, ChevronUp, X, ExternalLink,
   Edit3, Save, Check, Library
-} from 'lucide-react';
+, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
 import { useWorshipDisplaySync } from '@/hooks/useWorshipDisplaySync';
 import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { Song, SongMatch } from '@/types';
 import { SongImportModal } from './SongImportModal';
+import { LibraryManager } from './LibraryManager';
 import { useOrg } from '@/contexts/OrgContext';
 
 // Helper to split lyrics into sections
@@ -29,6 +30,8 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [searchSource, setSearchSource] = useState<'all' | 'library' | 'lrclib'>('all');
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showLibraryManager, setShowLibraryManager] = useState(false);
+  const [librarySongCount, setLibrarySongCount] = useState<number | null>(null);
   const { org } = useOrg();
 
   const searchSongs = useCallback(async (searchQuery: string) => {
@@ -128,7 +131,8 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
             <Upload className="w-4 h-4" />
           </button>
         </div>
-        <select
+        <div className="flex items-center gap-1">
+          <select
           value={searchSource}
           onChange={(e) => setSearchSource(e.target.value as any)}
           className="text-xs bg-verse-bg border border-verse-border rounded-lg px-2 py-1 text-verse-muted"
@@ -137,6 +141,14 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           <option value="library">My Library</option>
           <option value="lrclib">LRCLib</option>
         </select>
+          <button
+            onClick={() => setShowLibraryManager(true)}
+            className="p-1.5 text-verse-muted hover:text-gold-400 rounded-lg hover:bg-verse-border transition-colors"
+            title="Manage library"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
       
       <div className="p-4 space-y-3">
@@ -209,6 +221,14 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
         onClose={() => setShowImportModal(false)}
         onImportComplete={(count) => {
           console.log(`Imported ${count} songs`);
+        }}
+      />
+      
+      <LibraryManager
+        isOpen={showLibraryManager}
+        onClose={() => setShowLibraryManager(false)}
+        onSongDeleted={() => {
+          // Refresh search if needed
         }}
       />
     </div>

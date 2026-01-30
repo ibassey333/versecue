@@ -103,45 +103,79 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
           }
         }));
         
-        // Step 3: Search LRCLib for full lyrics
+        // Step 3: Search for full lyrics - LOCAL LIBRARY FIRST, then LRCLib
         setState(prev => ({ ...prev, status: 'searching' }));
         
-        const searchQuery = `${identified.title} ${identified.artist || ''}`.trim();
-        const searchResponse = await fetch(
-          `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`
-        );
+        const allMatches: SongMatch[] = [];
         
-        if (searchResponse.ok) {
-          const searchData = await searchResponse.json();
+        // 3a: Search LOCAL LIBRARY by title (ignore artist - LLM might say "Unknown")
+        try {
+          const libraryResponse = await fetch(
+            `/api/songs/search-by-title?title=${encodeURIComponent(identified.title)}`
+          );
           
-          const matches: SongMatch[] = searchData.slice(0, 5).map((item: any) => ({
-            song: {
-              id: `lrclib_${item.id}`,
-              title: item.trackName || item.name,
-              artist: item.artistName,
-              album: item.albumName,
-              lyrics: item.plainLyrics || '',
-              source: 'lrclib' as const,
-              sourceId: String(item.id),
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-            confidence: item.trackName?.toLowerCase() === identified.title?.toLowerCase() ? 1 : 0.8,
-            source: 'lrclib' as const,
-          }));
-          
-          setState(prev => ({ 
-            ...prev, 
-            status: 'complete',
-            matches,
-          }));
-        } else {
-          setState(prev => ({ 
-            ...prev, 
-            status: 'complete',
-            matches: [],
-          }));
+          if (libraryResponse.ok) {
+            const libraryData = await libraryResponse.json();
+            
+            if (libraryData.songs && libraryData.songs.length > 0) {
+              const libraryMatches: SongMatch[] = libraryData.songs.map((song: any) => ({
+                song: {
+                  id: song.id,
+                  title: song.title,
+                  artist: song.artist || 'Unknown',
+                  lyrics: song.lyrics || '',
+                  source: 'library' as const,
+                  createdAt: new Date(song.created_at),
+                  updatedAt: new Date(song.updated_at),
+                },
+                confidence: song.title?.toLowerCase() === identified.title?.toLowerCase() ? 1 : 0.9,
+                source: 'library' as const,
+              }));
+              allMatches.push(...libraryMatches);
+            }
+          }
+        } catch (e) {
+          console.log('[Detection] Library search failed, trying LRCLib');
         }
+        
+        // 3b: Search LRCLib as fallback (only if no library matches or to supplement)
+        if (allMatches.length < 3) {
+          try {
+            const searchQuery = `${identified.title} ${identified.artist || ''}`.trim();
+            const searchResponse = await fetch(
+              `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`
+            );
+            
+            if (searchResponse.ok) {
+              const searchData = await searchResponse.json();
+              
+              const lrcMatches: SongMatch[] = searchData.slice(0, 5).map((item: any) => ({
+                song: {
+                  id: `lrclib_${item.id}`,
+                  title: item.trackName || item.name,
+                  artist: item.artistName,
+                  album: item.albumName,
+                  lyrics: item.plainLyrics || '',
+                  source: 'lrclib' as const,
+                  sourceId: String(item.id),
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                },
+                confidence: item.trackName?.toLowerCase() === identified.title?.toLowerCase() ? 0.8 : 0.6,
+                source: 'lrclib' as const,
+              }));
+              allMatches.push(...lrcMatches);
+            }
+          } catch (e) {
+            console.log('[Detection] LRCLib search failed');
+          }
+        }
+        
+        setState(prev => ({ 
+          ...prev, 
+          status: 'complete',
+          matches: allMatches,
+        }));
       } else {
         setState(prev => ({ 
           ...prev, 

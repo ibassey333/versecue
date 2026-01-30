@@ -111,7 +111,7 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
         // 3a: Search LOCAL LIBRARY by title (ignore artist - LLM might say "Unknown")
         try {
           const libraryResponse = await fetch(
-            `/api/songs/search-by-title?title=${encodeURIComponent(identified.title)}`
+            `/api/songs/search-by-title?title=${encodeURIComponent(identified.title)}&lyrics=${encodeURIComponent(transcribedText)}`
           );
           
           if (libraryResponse.ok) {

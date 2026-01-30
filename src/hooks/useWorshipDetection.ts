@@ -138,36 +138,91 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
           console.log('[Detection] Library search failed, trying LRCLib');
         }
         
-        // 3b: Search LRCLib as fallback (only if no library matches or to supplement)
-        if (allMatches.length < 3) {
+        // 3b: Search LRCLib as fallback
+        if (allMatches.length < 5) {
+          const seenLrcIds = new Set<string>();
+          const seenTitles = new Set<string>();
+          
+          // First try: Search by title (short, just title + first artist name)
           try {
-            const searchQuery = `${identified.title} ${identified.artist || ''}`.trim();
-            const searchResponse = await fetch(
-              `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`
+            const firstArtist = (identified.artist || '').split(',')[0].split('/')[0].trim();
+            const titleQuery = `${identified.title} ${firstArtist}`.trim().substring(0, 50);
+            console.log('[Detection] LRCLib title search:', titleQuery);
+            
+            const titleResponse = await fetch(
+              `https://lrclib.net/api/search?q=${encodeURIComponent(titleQuery)}`
             );
             
-            if (searchResponse.ok) {
-              const searchData = await searchResponse.json();
-              
-              const lrcMatches: SongMatch[] = searchData.slice(0, 5).map((item: any) => ({
-                song: {
-                  id: `lrclib_${item.id}`,
-                  title: item.trackName || item.name,
-                  artist: item.artistName,
-                  album: item.albumName,
-                  lyrics: item.plainLyrics || '',
-                  source: 'lrclib' as const,
-                  sourceId: String(item.id),
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                },
-                confidence: item.trackName?.toLowerCase() === identified.title?.toLowerCase() ? 0.8 : 0.6,
-                source: 'lrclib' as const,
-              }));
-              allMatches.push(...lrcMatches);
+            if (titleResponse.ok) {
+              const titleData = await titleResponse.json();
+              for (const item of titleData.slice(0, 3)) {
+                const lrcId = `lrclib_${item.id}`;
+                if (!seenLrcIds.has(lrcId)) {
+                  seenLrcIds.add(lrcId);
+                  allMatches.push({
+                    song: {
+                      id: lrcId,
+                      title: item.trackName || item.name,
+                      artist: item.artistName,
+                      album: item.albumName,
+                      lyrics: item.plainLyrics || '',
+                      source: 'lrclib' as const,
+                      sourceId: String(item.id),
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                    },
+                    confidence: 0.7,
+                    source: 'lrclib' as const,
+                  });
+                }
+              }
             }
           } catch (e) {
-            console.log('[Detection] LRCLib search failed');
+            console.log('[Detection] LRCLib title search failed');
+          }
+          
+          // Second try: Search by LYRICS content (when LLM might be wrong)
+          try {
+            // Use first phrase of transcribed lyrics
+            const lyricsQuery = transcribedText
+              .split(/[,\.!?]/)[0]
+              .trim()
+              .substring(0, 60);
+            
+            if (lyricsQuery.length >= 15) {
+              console.log('[Detection] LRCLib lyrics search:', lyricsQuery);
+              
+              const lyricsResponse = await fetch(
+                `https://lrclib.net/api/search?q=${encodeURIComponent(lyricsQuery)}`
+              );
+              
+              if (lyricsResponse.ok) {
+                const lyricsData = await lyricsResponse.json();
+                for (const item of lyricsData.slice(0, 3)) {
+                  const lrcId = `lrclib_${item.id}`;
+                  if (!seenLrcIds.has(lrcId)) {
+                    seenLrcIds.add(lrcId);
+                    allMatches.push({
+                      song: {
+                        id: lrcId,
+                        title: item.trackName || item.name,
+                        artist: item.artistName,
+                        album: item.albumName,
+                        lyrics: item.plainLyrics || '',
+                        source: 'lrclib' as const,
+                        sourceId: String(item.id),
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                      },
+                      confidence: 0.8,
+                      source: 'lrclib' as const,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.log('[Detection] LRCLib lyrics search failed');
           }
         }
         

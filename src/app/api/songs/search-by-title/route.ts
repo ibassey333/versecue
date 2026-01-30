@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     // STRATEGY 3: Lyrics contain the transcribed phrase
-    if (lyrics.length >= 20 && allSongs.length < 3) {
+    if (lyrics.length >= 20 && allSongs.length < 10) {
       // Use a longer phrase for lyrics search (more specific)
       const lyricsPhrase = lyrics
         .replace(/[^a-zA-Z0-9\s]/g, '')

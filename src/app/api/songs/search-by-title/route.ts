@@ -8,81 +8,103 @@ export async function GET(request: NextRequest) {
     const title = searchParams.get('title') || '';
     const lyrics = searchParams.get('lyrics') || '';
     
+    console.log('[Search] Title:', title, 'Lyrics:', lyrics.substring(0, 50) + '...');
+    
     if (title.length < 2 && lyrics.length < 10) {
       return NextResponse.json({ songs: [] });
     }
 
-    // Build search query - search by title OR lyrics content
-    let query = supabase
-      .from('songs')
-      .select('id, title, artist, lyrics, source, created_at, updated_at');
-    
-    // Create OR conditions for flexible matching
-    const conditions: string[] = [];
-    
+    const allSongs: any[] = [];
+    const seenIds = new Set<string>();
+
+    // STRATEGY 1: Exact title match from LLM
     if (title.length >= 2) {
-      // Search title (fuzzy)
-      conditions.push(`title.ilike.%${title}%`);
-    }
-    
-    if (lyrics.length >= 10) {
-      // Extract key phrases from transcribed lyrics (first 50 chars)
-      const lyricsSnippet = lyrics.substring(0, 80).replace(/[^a-zA-Z0-9\s]/g, '');
-      const words = lyricsSnippet.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+      const { data: titleMatches } = await supabase
+        .from('songs')
+        .select('id, title, artist, lyrics, source, created_at, updated_at')
+        .ilike('title', `%${title}%`)
+        .limit(5);
       
-      // Search for songs containing these words in lyrics
-      for (const word of words) {
-        conditions.push(`lyrics.ilike.%${word}%`);
+      if (titleMatches) {
+        for (const song of titleMatches) {
+          if (!seenIds.has(song.id)) {
+            seenIds.add(song.id);
+            allSongs.push({ ...song, matchType: 'title' });
+          }
+        }
       }
-      
-      // Also search title using lyrics (e.g., "The Lord bless you" matches title)
-      const firstPhrase = lyrics.split(',')[0].trim().substring(0, 30);
-      if (firstPhrase.length > 5) {
-        conditions.push(`title.ilike.%${firstPhrase}%`);
-      }
-    }
-    
-    if (conditions.length > 0) {
-      query = query.or(conditions.join(','));
-    }
-    
-    const { data: songs, error } = await query.limit(15);
-    
-    if (error) {
-      console.error('Search error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.log('[Search] Title matches:', titleMatches?.length || 0);
     }
 
-    // Score and sort results by relevance
-    const scoredSongs = (songs || []).map(song => {
-      let score = 0;
-      const songTitle = song.title?.toLowerCase() || '';
-      const songLyrics = song.lyrics?.toLowerCase() || '';
-      const searchTitle = title.toLowerCase();
-      const searchLyrics = lyrics.toLowerCase();
+    // STRATEGY 2: First phrase of transcribed lyrics matches title
+    // e.g., "the Lord bless you and keep you" → title contains this
+    if (lyrics.length >= 10) {
+      // Get first meaningful phrase (before first comma or period, max 40 chars)
+      const firstPhrase = lyrics
+        .split(/[,\.!?]/)[0]
+        .trim()
+        .substring(0, 40)
+        .toLowerCase();
       
-      // Exact title match = highest score
-      if (songTitle === searchTitle) score += 100;
-      // Title contains search = high score
-      else if (songTitle.includes(searchTitle)) score += 50;
-      // Search contains title = medium score
-      else if (searchTitle.includes(songTitle)) score += 30;
+      if (firstPhrase.length >= 10) {
+        console.log('[Search] Searching title for phrase:', firstPhrase);
+        
+        const { data: phraseMatches } = await supabase
+          .from('songs')
+          .select('id, title, artist, lyrics, source, created_at, updated_at')
+          .ilike('title', `%${firstPhrase}%`)
+          .limit(5);
+        
+        if (phraseMatches) {
+          for (const song of phraseMatches) {
+            if (!seenIds.has(song.id)) {
+              seenIds.add(song.id);
+              allSongs.push({ ...song, matchType: 'phrase-in-title' });
+            }
+          }
+        }
+        console.log('[Search] Phrase-in-title matches:', phraseMatches?.length || 0);
+      }
+    }
+
+    // STRATEGY 3: Lyrics contain the transcribed phrase
+    if (lyrics.length >= 20 && allSongs.length < 3) {
+      // Use a longer phrase for lyrics search (more specific)
+      const lyricsPhrase = lyrics
+        .replace(/[^a-zA-Z0-9\s]/g, '')
+        .substring(0, 60)
+        .trim()
+        .toLowerCase();
       
-      // Lyrics contain transcribed text = high score
-      if (searchLyrics && songLyrics.includes(searchLyrics.substring(0, 30))) score += 40;
-      
-      // Title matches first phrase of lyrics
-      const firstPhrase = searchLyrics.split(',')[0]?.trim().toLowerCase() || '';
-      if (firstPhrase && songTitle.includes(firstPhrase.substring(0, 20))) score += 60;
-      
-      return { ...song, _score: score };
-    });
-    
-    // Sort by score descending
-    scoredSongs.sort((a, b) => b._score - a._score);
+      if (lyricsPhrase.length >= 15) {
+        console.log('[Search] Searching lyrics for:', lyricsPhrase.substring(0, 30) + '...');
+        
+        const { data: lyricsMatches } = await supabase
+          .from('songs')
+          .select('id, title, artist, lyrics, source, created_at, updated_at')
+          .ilike('lyrics', `%${lyricsPhrase.substring(0, 30)}%`)
+          .limit(5);
+        
+        if (lyricsMatches) {
+          for (const song of lyricsMatches) {
+            if (!seenIds.has(song.id)) {
+              seenIds.add(song.id);
+              allSongs.push({ ...song, matchType: 'lyrics-content' });
+            }
+          }
+        }
+        console.log('[Search] Lyrics-content matches:', lyricsMatches?.length || 0);
+      }
+    }
+
+    console.log('[Search] Total unique matches:', allSongs.length);
+
+    // Sort: title matches first, then phrase matches, then lyrics matches
+    const sortOrder = { 'title': 0, 'phrase-in-title': 1, 'lyrics-content': 2 };
+    allSongs.sort((a, b) => (sortOrder[a.matchType as keyof typeof sortOrder] || 99) - (sortOrder[b.matchType as keyof typeof sortOrder] || 99));
 
     return NextResponse.json({ 
-      songs: scoredSongs.map(({ _score, ...song }) => song)
+      songs: allSongs.map(({ matchType, ...song }) => song).slice(0, 10)
     });
     
   } catch (error: any) {

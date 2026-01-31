@@ -14,6 +14,19 @@ interface DetectionOptions {
   autoStopSeconds: number | null;
 }
 
+// Filter out non-music Genius results (books, court cases, etc.)
+function isLikelyMusic(title: string, artist: string): boolean {
+  const nonMusicIndicators = [
+    'book', 'chapter', 'vol.', 'volume', 'court', 'supreme', 
+    'nietzsche', 'aristotle', 'plato', 'shakespeare',
+    'novel', 'poem', 'essay', 'speech', 'galloway',
+    'arabian nights', 'dawn of day', 'the republic'
+  ];
+  
+  const combined = (title + ' ' + artist).toLowerCase();
+  return !nonMusicIndicators.some(indicator => combined.includes(indicator));
+}
+
 export function useWorshipDetection(options: DetectionOptions = { autoStopSeconds: 10 }) {
   const { org } = useOrg();
   const [state, setState] = useState<DetectionState>({
@@ -56,7 +69,7 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
       if (!transcribeRes.ok) throw new Error('Transcription failed');
       
       const { text: transcribedText } = await transcribeRes.json();
-      console.log(`[Detection] Transcribed in ${Date.now() - startTime}ms`);
+      console.log(`[Detection] Transcribed in ${Date.now() - startTime}ms:`, transcribedText);
       
       if (!transcribedText || transcribedText.trim().length < 10) {
         setState(prev => ({ 
@@ -73,61 +86,96 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
       setState(prev => ({ ...prev, status: 'searching' }));
       const searchStart = Date.now();
       
-      const allMatches: SongMatch[] = [];
+      const localMatches: SongMatch[] = [];
+      const onlineMatches: SongMatch[] = [];
       const seen = new Set<string>();
       
-      const addMatch = (title: string, artist: string, source: 'local' | 'lrclib', id?: string, lyrics?: string) => {
+      const addMatch = (
+        title: string, 
+        artist: string, 
+        source: 'local' | 'lrclib', 
+        id?: string, 
+        lyrics?: string,
+        isLocal: boolean = false
+      ) => {
         const key = (title + artist).toLowerCase().replace(/[^a-z0-9]/g, '');
         if (seen.has(key)) return;
         seen.add(key);
         
-        allMatches.push({
+        const match: SongMatch = {
           song: {
             id: id || `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             title,
             artist,
-            lyrics: lyrics || '', // May be empty - will fetch on selection
-            source,
+            lyrics: lyrics || '',
+            source: isLocal ? 'local' : 'lrclib',
             createdAt: new Date(),
             updatedAt: new Date(),
           } as Song,
-          confidence: source === 'local' ? 1 : 0.9,
-          source,
-        });
+          confidence: isLocal ? 1 : 0.8,
+          source: isLocal ? 'local' : 'lrclib',
+        };
+        
+        if (isLocal) {
+          localMatches.push(match);
+        } else {
+          onlineMatches.push(match);
+        }
       };
       
-      // Run BOTH searches in parallel - don't wait for each other
-      const [geniusResult, localResult] = await Promise.all([
-        // GENIUS: Fast lyrics-to-title search
-        fetch(`/api/genius/search?q=${encodeURIComponent(transcribedText.substring(0, 100))}`)
-          .then(r => r.ok ? r.json() : { hits: [] })
-          .catch(() => ({ hits: [] })),
-        
-        // LOCAL: Search your library
+      // Run BOTH searches in parallel
+      const [localResult, geniusResult] = await Promise.all([
+        // LOCAL: Search your library FIRST
         fetch(`/api/songs/search-by-lyrics?lyrics=${encodeURIComponent(transcribedText)}&organizationId=${org?.id || ''}`)
           .then(r => r.ok ? r.json() : { songs: [] })
           .catch(() => ({ songs: [] })),
+        
+        // GENIUS: Online search
+        fetch(`/api/genius/search?q=${encodeURIComponent(transcribedText.substring(0, 100))}`)
+          .then(r => r.ok ? r.json() : { hits: [] })
+          .catch(() => ({ hits: [] })),
       ]);
       
       console.log(`[Detection] Searches completed in ${Date.now() - searchStart}ms`);
       
-      // Add GENIUS results FIRST (most accurate for song identification)
-      if (geniusResult.hits) {
-        for (const hit of geniusResult.hits.slice(0, 5)) {
-          addMatch(hit.title, hit.artist, 'lrclib', `genius_${hit.id}`);
-        }
-        console.log(`[Detection] Genius: ${geniusResult.hits.length} hits`);
-      }
-      
-      // Add LOCAL results (your library)
-      if (localResult.songs) {
+      // Add LOCAL results FIRST (most relevant - your library!)
+      if (localResult.songs && localResult.songs.length > 0) {
         for (const song of localResult.songs.slice(0, 5)) {
-          addMatch(song.title, song.artist || 'Unknown', 'local', song.id, song.lyrics);
+          addMatch(
+            song.title, 
+            song.artist || 'Unknown', 
+            'local', 
+            song.id, 
+            song.lyrics,
+            true // isLocal
+          );
         }
-        console.log(`[Detection] Local: ${localResult.songs.length} songs`);
+        console.log(`[Detection] Local: ${localResult.songs.length} songs (PRIORITY)`);
       }
       
-      console.log(`[Detection] Total: ${allMatches.length} matches in ${Date.now() - startTime}ms`);
+      // Add GENIUS results (filtered - remove books/court cases)
+      if (geniusResult.hits && geniusResult.hits.length > 0) {
+        const musicHits = geniusResult.hits.filter((hit: any) => 
+          isLikelyMusic(hit.title || '', hit.artist || '')
+        );
+        
+        for (const hit of musicHits.slice(0, 5)) {
+          addMatch(
+            hit.title, 
+            hit.artist, 
+            'lrclib', 
+            `genius_${hit.id}`,
+            '', // No lyrics yet - will fetch on selection
+            false // isLocal
+          );
+        }
+        console.log(`[Detection] Genius: ${musicHits.length} music results (filtered from ${geniusResult.hits.length})`);
+      }
+      
+      // Combine: LOCAL first, then ONLINE
+      const allMatches = [...localMatches, ...onlineMatches];
+      
+      console.log(`[Detection] Total: ${allMatches.length} matches (${localMatches.length} local, ${onlineMatches.length} online)`);
       
       setState(prev => ({ 
         ...prev, 

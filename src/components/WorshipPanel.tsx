@@ -832,7 +832,7 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
                 )}
                 {match.source === 'lrclib' && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 flex-shrink-0">
-                    LRCLib
+                    Online
                   </span>
                 )}
               </button>

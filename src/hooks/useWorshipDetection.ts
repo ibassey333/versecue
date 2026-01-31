@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Song, SongMatch } from '@/types';
+import { useOrg } from '@/contexts/OrgContext';
 
 interface DetectionState {
-  status: 'idle' | 'recording' | 'transcribing' | 'identifying' | 'searching' | 'complete' | 'error';
+  status: 'idle' | 'recording' | 'transcribing' | 'searching' | 'complete' | 'error';
   transcribedText: string;
-  identifiedSong: { title: string; artist: string; confidence: string; } | null;
   matches: SongMatch[];
   error: string | null;
   recordingTime: number;
@@ -15,10 +15,10 @@ interface DetectionOptions {
 }
 
 export function useWorshipDetection(options: DetectionOptions = { autoStopSeconds: 10 }) {
+  const { org } = useOrg();
   const [state, setState] = useState<DetectionState>({
     status: 'idle',
     transcribedText: '',
-    identifiedSong: null,
     matches: [],
     error: null,
     recordingTime: 0,
@@ -39,141 +39,95 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
   }, []);
 
   const processAudio = useCallback(async (audioBlob: Blob) => {
+    const startTime = Date.now();
+    
     try {
-      // Step 1: Transcribe
+      // ========== STEP 1: TRANSCRIBE ==========
       setState(prev => ({ ...prev, status: 'transcribing' }));
       
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
       
-      const transcribeResponse = await fetch('/api/worship/transcribe', {
+      const transcribeRes = await fetch('/api/worship/transcribe', {
         method: 'POST',
         body: formData,
       });
       
-      if (!transcribeResponse.ok) throw new Error('Transcription failed');
+      if (!transcribeRes.ok) throw new Error('Transcription failed');
       
-      const { text: transcribedText } = await transcribeResponse.json();
+      const { text: transcribedText } = await transcribeRes.json();
+      console.log(`[Detection] Transcribed in ${Date.now() - startTime}ms`);
       
       if (!transcribedText || transcribedText.trim().length < 10) {
-        setState(prev => ({ ...prev, status: 'error', error: 'Could not transcribe. Sing more clearly.' }));
+        setState(prev => ({ 
+          ...prev, 
+          status: 'error', 
+          error: 'Could not hear clearly. Try again.' 
+        }));
         return;
       }
       
       setState(prev => ({ ...prev, transcribedText }));
-      console.log('[Detection] Transcribed:', transcribedText);
       
-      // Step 2: Identify with LLM
-      setState(prev => ({ ...prev, status: 'identifying' }));
-      
-      const identifyResponse = await fetch('/api/worship/identify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lyrics: transcribedText }),
-      });
-      
-      if (!identifyResponse.ok) throw new Error('Identification failed');
-      
-      const identified = await identifyResponse.json();
-      
-      if (!identified.identified || !identified.title) {
-        setState(prev => ({ ...prev, status: 'error', error: 'Could not identify. Try different lyrics.' }));
-        return;
-      }
-      
-      setState(prev => ({ 
-        ...prev, 
-        identifiedSong: {
-          title: identified.title,
-          artist: identified.artist || 'Unknown',
-          confidence: identified.confidence || 'medium',
-        }
-      }));
-      
-      // Step 3: Search - SIMPLE & FAST
+      // ========== STEP 2: FAST PARALLEL SEARCH ==========
       setState(prev => ({ ...prev, status: 'searching' }));
+      const searchStart = Date.now();
       
       const allMatches: SongMatch[] = [];
       const seen = new Set<string>();
       
-      const addMatch = (song: any, source: 'local' | 'lrclib') => {
-        const key = (song.title + song.artist).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const addMatch = (title: string, artist: string, source: 'local' | 'lrclib', id?: string, lyrics?: string) => {
+        const key = (title + artist).toLowerCase().replace(/[^a-z0-9]/g, '');
         if (seen.has(key)) return;
         seen.add(key);
+        
         allMatches.push({
           song: {
-            id: song.id || `lrclib_${Date.now()}_${Math.random()}`,
-            title: song.title,
-            artist: song.artist || 'Unknown',
-            lyrics: song.lyrics || '',
-            source: source,
+            id: id || `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            title,
+            artist,
+            lyrics: lyrics || '', // May be empty - will fetch on selection
+            source,
             createdAt: new Date(),
             updatedAt: new Date(),
-          },
-          confidence: source === 'local' ? 1 : 0.8,
-          source: source,
+          } as Song,
+          confidence: source === 'local' ? 1 : 0.9,
+          source,
         });
       };
       
-      // Search 1: Local library (fast, parallel)
-      const localPromise = fetch(
-        `/api/songs/search-by-title?title=${encodeURIComponent(identified.title)}&lyrics=${encodeURIComponent(transcribedText.substring(0, 100))}`
-      ).then(r => r.ok ? r.json() : { songs: [] }).catch(() => ({ songs: [] }));
-      
-      // Search 2: LRCLib with LYRICS (most reliable - finds song even if LLM title is wrong)
-      const lyricsQuery = transcribedText.substring(0, 80);
-      const lrcLyricsPromise = fetch(
-        `https://lrclib.net/api/search?q=${encodeURIComponent(lyricsQuery)}`
-      ).then(r => r.ok ? r.json() : []).catch(() => []);
-      
-      // Search 3: LRCLib with title (backup)
-      const titleQuery = identified.title;
-      const lrcTitlePromise = fetch(
-        `https://lrclib.net/api/search?q=${encodeURIComponent(titleQuery)}`
-      ).then(r => r.ok ? r.json() : []).catch(() => []);
-      
-      // Run ALL searches in parallel (fast!)
-      const [localResult, lrcLyricsResult, lrcTitleResult] = await Promise.all([
-        localPromise,
-        lrcLyricsPromise,
-        lrcTitlePromise,
+      // Run BOTH searches in parallel - don't wait for each other
+      const [geniusResult, localResult] = await Promise.all([
+        // GENIUS: Fast lyrics-to-title search
+        fetch(`/api/genius/search?q=${encodeURIComponent(transcribedText.substring(0, 100))}`)
+          .then(r => r.ok ? r.json() : { hits: [] })
+          .catch(() => ({ hits: [] })),
+        
+        // LOCAL: Search your library
+        fetch(`/api/songs/search-by-lyrics?lyrics=${encodeURIComponent(transcribedText)}&organizationId=${org?.id || ''}`)
+          .then(r => r.ok ? r.json() : { songs: [] })
+          .catch(() => ({ songs: [] })),
       ]);
       
-      console.log('[Detection] Local:', localResult.songs?.length || 0);
-      console.log('[Detection] LRCLib lyrics:', lrcLyricsResult?.length || 0);
-      console.log('[Detection] LRCLib title:', lrcTitleResult?.length || 0);
+      console.log(`[Detection] Searches completed in ${Date.now() - searchStart}ms`);
       
-      // Add local matches first (priority)
-      for (const song of (localResult.songs || [])) {
-        addMatch({
-          id: song.id,
-          title: song.title,
-          artist: song.artist,
-          lyrics: song.lyrics,
-        }, 'local');
+      // Add GENIUS results FIRST (most accurate for song identification)
+      if (geniusResult.hits) {
+        for (const hit of geniusResult.hits.slice(0, 5)) {
+          addMatch(hit.title, hit.artist, 'lrclib', `genius_${hit.id}`);
+        }
+        console.log(`[Detection] Genius: ${geniusResult.hits.length} hits`);
       }
       
-      // Add LRCLib lyrics matches (most accurate when LLM is wrong)
-      for (const item of (lrcLyricsResult || []).slice(0, 5)) {
-        addMatch({
-          id: `lrclib_${item.id}`,
-          title: item.trackName || item.name,
-          artist: item.artistName,
-          lyrics: item.plainLyrics || '',
-        }, 'lrclib');
+      // Add LOCAL results (your library)
+      if (localResult.songs) {
+        for (const song of localResult.songs.slice(0, 5)) {
+          addMatch(song.title, song.artist || 'Unknown', 'local', song.id, song.lyrics);
+        }
+        console.log(`[Detection] Local: ${localResult.songs.length} songs`);
       }
       
-      // Add LRCLib title matches
-      for (const item of (lrcTitleResult || []).slice(0, 3)) {
-        addMatch({
-          id: `lrclib_${item.id}`,
-          title: item.trackName || item.name,
-          artist: item.artistName,
-          lyrics: item.plainLyrics || '',
-        }, 'lrclib');
-      }
-      
-      console.log('[Detection] Total unique:', allMatches.length);
+      console.log(`[Detection] Total: ${allMatches.length} matches in ${Date.now() - startTime}ms`);
       
       setState(prev => ({ 
         ...prev, 
@@ -183,9 +137,13 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
       
     } catch (error: any) {
       console.error('[Detection] Error:', error);
-      setState(prev => ({ ...prev, status: 'error', error: error.message || 'Detection failed' }));
+      setState(prev => ({ 
+        ...prev, 
+        status: 'error', 
+        error: error.message || 'Detection failed' 
+      }));
     }
-  }, []);
+  }, [org?.id]);
 
   const stopRecording = useCallback(async () => {
     cleanup();
@@ -219,7 +177,6 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
       setState({
         status: 'recording',
         transcribedText: '',
-        identifiedSong: null,
         matches: [],
         error: null,
         recordingTime: 0,
@@ -236,7 +193,10 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
         mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
       });
       
-      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mediaRecorder.ondataavailable = (e) => { 
+        if (e.data.size > 0) audioChunksRef.current.push(e.data); 
+      };
+      
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(1000);
       
@@ -258,7 +218,7 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
     cleanup();
     if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach(track => track.stop());
-    setState({ status: 'idle', transcribedText: '', identifiedSong: null, matches: [], error: null, recordingTime: 0 });
+    setState({ status: 'idle', transcribedText: '', matches: [], error: null, recordingTime: 0 });
   }, [cleanup]);
 
   useEffect(() => {
@@ -268,7 +228,7 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
   return {
     ...state,
     isRecording: state.status === 'recording',
-    isProcessing: ['transcribing', 'identifying', 'searching'].includes(state.status),
+    isProcessing: ['transcribing', 'searching'].includes(state.status),
     startRecording,
     stopRecording,
     reset,

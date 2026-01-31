@@ -681,7 +681,6 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
   const {
     status,
     transcribedText,
-    identifiedSong,
     matches,
     error,
     isRecording,
@@ -703,10 +702,9 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
   const statusMessages: Record<string, string> = {
     idle: 'Ready to detect',
     recording: 'Listening... Sing clearly!',
-    transcribing: 'Transcribing audio...',
-    identifying: 'Identifying song...',
-    searching: 'Fetching lyrics...',
-    complete: identifiedSong ? `Found: ${identifiedSong.title}` : 'Detection complete',
+    transcribing: 'Processing audio...',
+    searching: 'Searching for matches...',
+    complete: matches.length > 0 ? `Found ${matches.length} match${matches.length > 1 ? 'es' : ''}` : 'No matches found',
     error: error || 'Something went wrong',
   };
 
@@ -778,9 +776,9 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
                 {recordingTime}s {autoStopSeconds ? `/ ${autoStopSeconds}s` : ''}
               </p>
             )}
-            {identifiedSong && (
+            {matches.length > 0 && status === 'complete' && (
               <p className="text-xs text-verse-muted">
-                {identifiedSong.artist} • {identifiedSong.confidence} confidence
+                Select a song below
               </p>
             )}
           </div>
@@ -801,12 +799,26 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
             {matches.map((match) => (
               <button
                 key={match.song.id}
-                onClick={() => onSongSelect(match.song)}
-                className={cn(
-                  "w-full flex items-center gap-3 p-3 border rounded-lg text-left transition-all",
-                  "bg-verse-bg hover:bg-verse-border/50",
-                  "border-verse-border hover:border-gold-500/30"
-                )}
+                onClick={async () => {
+                  // If no lyrics, fetch them first
+                  if (!match.song.lyrics) {
+                    try {
+                      const res = await fetch(
+                        `/api/lyrics/fetch?title=${encodeURIComponent(match.song.title)}&artist=${encodeURIComponent(match.song.artist || '')}`
+                      );
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.lyrics) {
+                          match.song.lyrics = data.lyrics;
+                        }
+                      }
+                    } catch (e) {
+                      console.log('Could not fetch lyrics');
+                    }
+                  }
+                  onSongSelect(match.song);
+                }}
+                className="w-full flex items-center gap-3 p-3 bg-verse-bg hover:bg-verse-border/50 border border-verse-border hover:border-gold-500/30 rounded-lg text-left transition-all active:scale-[0.98]"
               >
                 <Music className="w-4 h-4 text-gold-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">

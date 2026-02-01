@@ -15,6 +15,8 @@ import { SongImportModal } from './SongImportModal';
 import { LibraryManager } from './LibraryManager';
 import { useOrg } from '@/contexts/OrgContext';
 
+import { YouTubeImportModal } from '@/components/YouTubeImportModal';
+import { Video } from 'lucide-react';
 // Helper to split lyrics into sections
 const splitLyrics = (lyrics: string): string[] => {
   return lyrics.split(/\n\n+/).filter(Boolean);
@@ -31,6 +33,7 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   const [searchSource, setSearchSource] = useState<'all' | 'library' | 'lrclib'>('all');
   const [hasSelected, setHasSelected] = useState(false); // Track if user selected a song
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showYouTubeImport, setShowYouTubeImport] = useState(false);
   const [showLibraryManager, setShowLibraryManager] = useState(false);
   const [librarySongCount, setLibrarySongCount] = useState<number | null>(null);
   const { org } = useOrg();
@@ -131,6 +134,14 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           >
             <Upload className="w-4 h-4" />
           </button>
+            {/* YouTube/Video Import */}
+            <button
+              onClick={() => setShowYouTubeImport(true)}
+              className="p-2 hover:bg-verse-border rounded-lg transition-colors group"
+              title="Import from YouTube or video/audio file"
+            >
+              <Video className="w-4 h-4 text-verse-muted group-hover:text-gold-500" />
+            </button>
         </div>
         <div className="flex items-center gap-1">
           <select
@@ -235,6 +246,15 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
         onClose={() => setShowImportModal(false)}
         onImportComplete={(count) => {
           console.log(`Imported ${count} songs`);
+        }}
+      />
+      {/* YouTube Import Modal */}
+      <YouTubeImportModal
+        isOpen={showYouTubeImport}
+        onClose={() => setShowYouTubeImport(false)}
+        onImportComplete={(song) => {
+          setShowYouTubeImport(false);
+          // Optionally add to setlist or set as current song
         }}
       />
       

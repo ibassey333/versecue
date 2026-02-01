@@ -91,7 +91,28 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false });
     
     if (query) {
-      dbQuery = dbQuery.or(`title.ilike.%${query}%,artist.ilike.%${query}%`);
+      // Normalize query for fuzzy matching
+      const q = query.trim();
+      const qNoSpaces = q.replace(/\s+/g, '');  // "Way Maker" -> "WayMaker"
+      const qNoPunct = q.replace(/[^a-zA-Z0-9\s]/g, ''); // "10,000" -> "10000"
+      
+      // Build OR conditions for fuzzy matching
+      const conditions = [
+        `title.ilike.%${q}%`,
+        `artist.ilike.%${q}%`,
+      ];
+      
+      // Add no-spaces variant if different
+      if (qNoSpaces !== q) {
+        conditions.push(`title.ilike.%${qNoSpaces}%`);
+      }
+      
+      // Add no-punctuation variant if different
+      if (qNoPunct !== q) {
+        conditions.push(`title.ilike.%${qNoPunct}%`);
+      }
+      
+      dbQuery = dbQuery.or(conditions.join(','));
     }
     
     const { data, error } = await dbQuery.limit(50);

@@ -29,6 +29,7 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchSource, setSearchSource] = useState<'all' | 'library' | 'lrclib'>('all');
+  const [hasSelected, setHasSelected] = useState(false); // Track if user selected a song
   const [showImportModal, setShowImportModal] = useState(false);
   const [showLibraryManager, setShowLibraryManager] = useState(false);
   const [librarySongCount, setLibrarySongCount] = useState<number | null>(null);
@@ -157,12 +158,27 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setHasSelected(false); // Resume searching on new input
+            }}
             placeholder="Search by title or artist..."
-            className="w-full pl-10 pr-4 py-3 bg-verse-bg border border-verse-border rounded-xl text-verse-text placeholder-verse-muted text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500"
+            className="w-full pl-10 pr-10 py-3 bg-verse-bg border border-verse-border rounded-xl text-verse-text placeholder-verse-muted text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500"
           />
-          {isSearching && (
+          {isSearching ? (
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold-500 animate-spin" />
+          ) : query && (
+            <button
+              onClick={() => {
+                setQuery('');
+                setResults([]);
+                setHasSelected(false);
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-verse-muted hover:text-verse-text transition-colors"
+              title="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
           )}
         </div>
 
@@ -175,8 +191,6 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
                 key={match.song.id}
                 onClick={() => {
                   onSelect(match.song);
-                  setQuery('');
-                  setResults([]);
                 }}
                 className="w-full flex items-center gap-3 p-3 bg-verse-bg hover:bg-verse-border/50 border border-transparent hover:border-gold-500/30 rounded-lg text-left transition-all group"
               >

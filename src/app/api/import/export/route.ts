@@ -17,13 +17,11 @@ export async function POST(request: NextRequest) {
       artist: string;
       sections: ExportSection[];
     };
-
     if (format === 'docx') {
       return generateDocx(title, artist, sections);
     } else if (format === 'pdf') {
       return generatePdf(title, artist, sections);
     }
-
     return NextResponse.json({ error: 'Invalid format' }, { status: 400 });
   } catch (error) {
     console.error('[Export] Error:', error);
@@ -46,12 +44,14 @@ async function generateDocx(title: string, artist: string, sections: ExportSecti
   ];
 
   for (const section of sections) {
-    // Section label
-    children.push(new Paragraph({
-      children: [new TextRun({ text: `[${section.label}]`, bold: true, size: 22, color: 'B8860B', font: 'Calibri' })],
-      spacing: { before: 300, after: 100 },
-    }));
-
+    // Section label (may contain \n for batch titles)
+    for (const labelLine of section.label.split('\n')) {
+      if (!labelLine.trim()) continue;
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `[${labelLine}]`, bold: true, size: 22, color: 'B8860B', font: 'Calibri' })],
+        spacing: { before: 300, after: 100 },
+      }));
+    }
     // Lyrics lines
     for (const line of section.lyrics.split('\n')) {
       children.push(new Paragraph({
@@ -69,7 +69,6 @@ async function generateDocx(title: string, artist: string, sections: ExportSecti
       children,
     }],
   });
-
   const buffer = await Packer.toBuffer(doc);
   return new NextResponse(buffer, {
     headers: {
@@ -83,7 +82,6 @@ async function generatePdf(title: string, artist: string, sections: ExportSectio
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
   const pageW = 612, pageH = 792;
   const margin = 72;
   const lineH = 18;
@@ -95,12 +93,23 @@ async function generatePdf(title: string, artist: string, sections: ExportSectio
     y = pageH - margin;
   };
 
-  const drawText = (text: string, f: typeof font, size: number, color = rgb(0, 0, 0), centered = false) => {
+  // Draw a single line of text (NO newlines allowed)
+  const drawLine = (text: string, f: typeof font, size: number, color = rgb(0, 0, 0), centered = false) => {
+    const clean = text.replace(/\n/g, ' ').trim();
+    if (!clean) return;
     if (y < margin + lineH) addPage();
-    const w = f.widthOfTextAtSize(text, size);
+    const w = f.widthOfTextAtSize(clean, size);
     const x = centered ? (pageW - w) / 2 : margin;
-    page.drawText(text, { x, y, size, font: f, color });
+    page.drawText(clean, { x, y, size, font: f, color });
     y -= size + 6;
+  };
+
+  // Draw text that may contain newlines — splits and draws each line
+  const drawText = (text: string, f: typeof font, size: number, color = rgb(0, 0, 0), centered = false) => {
+    const lines = text.split('\n');
+    for (const line of lines) {
+      drawLine(line, f, size, color, centered);
+    }
   };
 
   // Title
@@ -113,7 +122,7 @@ async function generatePdf(title: string, artist: string, sections: ExportSectio
     y -= 10;
     drawText(`[${section.label}]`, bold, 11, rgb(0.72, 0.53, 0.04));
     for (const line of section.lyrics.split('\n')) {
-      if (line.trim()) drawText(line, font, 12);
+      if (line.trim()) drawLine(line, font, 12);
     }
   }
 

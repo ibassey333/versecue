@@ -256,6 +256,7 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   const [batchText, setBatchText] = useState('');
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
+  const [batchCopied, setBatchCopied] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState('');
   const [steps, setSteps] = useState<ProcessStep[]>([]);
@@ -629,7 +630,7 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
               <div className="flex items-center justify-between">
                 <p className="text-verse-text text-sm font-medium">{batchResults.filter(r => r.status === 'complete').length} songs ready</p>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={(e) => {
+                  <button type="button" onClick={() => {
                     const selected = batchResults.filter(r => r.status === 'complete' && r.selected);
                     if (selected.length === 0) return;
                     navigator.clipboard.writeText(
@@ -640,13 +641,12 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                         return r.title + (r.artist ? ' - ' + r.artist : '') + '\n\n' + body;
                       }).join('\n\n' + '='.repeat(40) + '\n\n')
                     );
-                    const btn = e.currentTarget;
-                    const orig = btn.innerHTML;
-                    btn.innerHTML = '<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
-                    btn.classList.add('text-green-400', 'border-green-400/30');
-                    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('text-green-400', 'border-green-400/30'); }, 1500);
-                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1 px-2 py-1 border border-verse-border rounded-lg transition-colors">
-                    <Copy className="w-3 h-3" /> Copy
+                    setBatchCopied(true);
+                    setTimeout(() => setBatchCopied(false), 1500);
+                  }} className={cn("text-xs flex items-center gap-1 px-2 py-1 border rounded-lg transition-colors",
+                    batchCopied ? "text-green-400 border-green-400/30" : "text-verse-muted hover:text-verse-text border-verse-border")}>
+                    {batchCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {batchCopied ? 'Copied!' : 'Copy'}
                   </button>
                   <button type="button" onClick={() => {
                     const selected = batchResults.filter(r => r.status === 'complete' && r.selected);

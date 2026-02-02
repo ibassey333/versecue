@@ -628,7 +628,21 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-verse-text text-sm font-medium">{batchResults.filter(r => r.status === 'complete').length} songs ready</p>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={() => {
+                    const selected = batchResults.filter(r => r.status === 'complete' && r.selected);
+                    if (selected.length === 0) return;
+                    navigator.clipboard.writeText(
+                      selected.map(r => {
+                        const body = r.sections.length > 0
+                          ? r.sections.map(s => '[' + s.label + ']\n' + s.lyrics).join('\n\n')
+                          : r.lyrics;
+                        return r.title + (r.artist ? ' - ' + r.artist : '') + '\n\n' + body;
+                      }).join('\n\n' + '='.repeat(40) + '\n\n')
+                    );
+                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1 px-2 py-1 border border-verse-border rounded-lg">
+                    <Copy className="w-3 h-3" /> Copy
+                  </button>
                   <button type="button" onClick={() => {
                     const selected = batchResults.filter(r => r.status === 'complete' && r.selected);
                     if (selected.length === 0) return;
@@ -643,22 +657,33 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
                     a.download = 'worship-songs.txt'; document.body.appendChild(a);
                     a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
-                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1">
-                    <Download className="w-3 h-3" /> Export All TXT
+                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1 px-2 py-1 border border-verse-border rounded-lg">
+                    <FileText className="w-3 h-3" /> TXT
                   </button>
-                  <button type="button" onClick={() => {
-                    navigator.clipboard.writeText(
-                      batchResults.filter(r => r.status === 'complete' && r.selected).map(r => {
-                        const body = r.sections.length > 0
-                          ? r.sections.map(s => '[' + s.label + ']\n' + s.lyrics).join('\n\n')
-                          : r.lyrics;
-                        return r.title + '\n\n' + body;
-                      }).join('\n\n' + '='.repeat(40) + '\n\n')
-                    );
-                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1">
-                    <Copy className="w-3 h-3" /> Copy All
-                  </button>
-                  <button type="button" onClick={() => setBatchResults(batchResults.map(r => ({ ...r, selected: !batchResults.every(x => x.selected) })))} className="text-gold-500 text-xs hover:text-gold-400">
+                  {(['docx', 'pdf'] as const).map(fmt => (
+                    <button key={fmt} type="button" onClick={async () => {
+                      const selected = batchResults.filter(r => r.status === 'complete' && r.selected);
+                      if (selected.length === 0) return;
+                      const allSections = selected.flatMap((r, idx) => {
+                        const songHeader = { type: 'other' as const, label: (idx > 0 ? '---\n' : '') + r.title + (r.artist ? ' - ' + r.artist : ''), lyrics: '', order: 0 };
+                        return [songHeader, ...r.sections.map(s => ({ ...s }))];
+                      });
+                      try {
+                        const res = await fetch('/api/import/export', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ format: fmt, title: 'Worship Songs', artist: '', sections: allSections }),
+                        });
+                        if (!res.ok) throw new Error('Export failed');
+                        const blob = await res.blob();
+                        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                        a.download = 'worship-songs.' + fmt; document.body.appendChild(a);
+                        a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+                      } catch { alert('Export failed'); }
+                    }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1 px-2 py-1 border border-verse-border rounded-lg">
+                      <Download className="w-3 h-3" /> {fmt.toUpperCase()}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setBatchResults(batchResults.map(r => ({ ...r, selected: !batchResults.every(x => x.selected) })))} className="text-gold-500 text-xs hover:text-gold-400 ml-1">
                     {batchResults.every(r => r.selected) ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>

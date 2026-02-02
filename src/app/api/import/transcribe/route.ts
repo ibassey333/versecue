@@ -1,319 +1,129 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { spawn } from 'child_process';
+import { readFile, writeFile, unlink, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import os from 'os';
 import Groq from 'groq-sdk';
 
-// ============================================================================
-// TYPES
-// ============================================================================
+const TEMP_DIR = path.join(os.tmpdir(), 'versecue-imports');
+const MAX_SIZE = 50 * 1024 * 1024;
+const GROQ_LIMIT = 24 * 1024 * 1024;
+const PATH_EXT = '/opt/homebrew/bin:/usr/local/bin:/usr/bin';
 
-interface TranscriptionResult {
-  text: string;
-  language: string;
-  detectedLanguages: string[];
-  duration?: number;
-  segments?: TranscriptionSegment[];
-  suggestedTitle?: string;
-  suggestedArtist?: string;
-}
+// Languages actually supported by Groq Whisper
+const WHISPER_LANGS = new Set([
+  'en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca',
+  'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi', 'he', 'uk', 'el', 'ms',
+  'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la',
+  'mi', 'ml', 'cy', 'sk', 'te', 'fa', 'lv', 'bn', 'sr', 'az', 'sl', 'kn',
+  'et', 'mk', 'br', 'eu', 'is', 'hy', 'ne', 'mn', 'bs', 'kk', 'sq', 'sw',
+  'gl', 'mr', 'pa', 'si', 'km', 'sn', 'yo', 'so', 'af', 'oc', 'ka', 'be',
+  'tg', 'sd', 'gu', 'am', 'yi', 'lo', 'uz', 'fo', 'ht', 'ps', 'tk', 'nn',
+  'mt', 'sa', 'lb', 'my', 'bo', 'tl', 'mg', 'as', 'tt', 'haw', 'ln', 'ha',
+  'ba', 'jv', 'su', 'yue',
+]);
 
-interface TranscriptionSegment {
-  start: number;
-  end: number;
-  text: string;
-}
+// Languages NOT supported by Whisper but we support via LLM correction
+// ig (Igbo), pcm (Pidgin), tw (Twi), zu (Zulu)
+// For these: transcribe with auto-detect, then correct via LLM
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-
-// Language display names
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  yo: 'Yoruba',
-  ig: 'Igbo',
-  ha: 'Hausa',
-  sw: 'Swahili',
-  es: 'Spanish',
-  pt: 'Portuguese',
-  fr: 'French',
-  de: 'German',
-  it: 'Italian',
-  ko: 'Korean',
-  zh: 'Chinese',
-  ja: 'Japanese',
-  hi: 'Hindi',
-  ar: 'Arabic',
-  ru: 'Russian',
-  pl: 'Polish',
-  id: 'Indonesian',
-  tw: 'Twi',
-  zu: 'Zulu',
-  am: 'Amharic',
-  pcm: 'Pidgin',
-};
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-function detectMixedLanguages(text: string, primaryLanguage: string): string[] {
-  const detected = new Set<string>();
-  detected.add(primaryLanguage);
-  
-  // Common patterns for mixed-language worship songs
-  // Yoruba patterns
-  const yorubaPatterns = [
-    /\bimela\b/i,
-    /\bokaka\b/i,
-    /\bonyekeruwa\b/i,
-    /\beze\s+mo\b/i,
-    /\boluwa\b/i,
-    /\bbaba\b/i,
-    /\bjesu\b/i,
-    /\bhalleluyah\b/i,
-    /\bolorun\b/i,
-  ];
-  
-  // Igbo patterns
-  const igboPatterns = [
-    /\bnara\s+ekele\b/i,
-    /\bchukwu\b/i,
-    /\bnwanne\b/i,
-    /\bdi\s+nma\b/i,
-  ];
-  
-  // Check for Yoruba
-  if (primaryLanguage !== 'yo' && yorubaPatterns.some(p => p.test(text))) {
-    detected.add('yo');
-  }
-  
-  // Check for Igbo
-  if (primaryLanguage !== 'ig' && igboPatterns.some(p => p.test(text))) {
-    detected.add('ig');
-  }
-  
-  // Check for English (common in African worship)
-  const englishPatterns = [
-    /\bjesus\b/i,
-    /\bworthy\b/i,
-    /\bholy\b/i,
-    /\bpraise\b/i,
-    /\blord\b/i,
-    /\bgrateful\b/i,
-    /\bthank\s+you\b/i,
-    /\bglory\b/i,
-  ];
-  
-  if (primaryLanguage !== 'en' && englishPatterns.some(p => p.test(text))) {
-    detected.add('en');
-  }
-  
-  return Array.from(detected).map(code => LANGUAGE_NAMES[code] || code);
-}
-
-async function extractMetadataFromText(
-  text: string,
-  groq: Groq
-): Promise<{ title?: string; artist?: string }> {
-  try {
-    // Use a quick LLM call to try to identify song info from lyrics
-    const response = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a worship music expert. Given song lyrics, identify the song title and artist if you recognize it. Only respond if you're confident. Respond in JSON format: {"title": "...", "artist": "..."} or {"title": null, "artist": null} if unknown.`,
-        },
-        {
-          role: 'user',
-          content: `Identify this song from its lyrics (first 500 characters):\n\n${text.slice(0, 500)}`,
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 100,
+function run(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(cmd, args, {
+      env: { ...process.env, PATH: `${PATH_EXT}:${process.env.PATH}` },
+      shell: true,
     });
-    
-    const content = response.choices[0]?.message?.content || '{}';
-    // Extract JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        title: parsed.title || undefined,
-        artist: parsed.artist || undefined,
-      };
-    }
-  } catch (error) {
-    console.warn('Metadata extraction failed:', error);
-  }
-  
-  return {};
+    let stdout = '', stderr = '';
+    proc.stdout.on('data', (d) => (stdout += d));
+    proc.stderr.on('data', (d) => (stderr += d));
+    proc.on('close', (code) =>
+      code === 0 ? resolve({ stdout, stderr }) : reject(new Error(stderr.slice(-300) || `Exit ${code}`))
+    );
+    proc.on('error', reject);
+  });
 }
-
-// ============================================================================
-// ROUTE HANDLER
-// ============================================================================
 
 export async function POST(request: NextRequest) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'Not configured' }, { status: 500 });
+  }
+
+  let tempIn: string | null = null;
+  let tempOut: string | null = null;
+
   try {
-    // Check for API key
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Configuration error', message: 'Transcription service not configured' },
-        { status: 500 }
-      );
-    }
-    
-    // Parse multipart form data
     const formData = await request.formData();
-    const audioFile = formData.get('audio') as File | Blob;
-    const language = (formData.get('language') as string) || 'auto';
-    const providedTitle = formData.get('title') as string | null;
-    const providedArtist = formData.get('artist') as string | null;
-    
-    if (!audioFile) {
-      return NextResponse.json(
-        { error: 'No audio file', message: 'Please provide an audio file' },
-        { status: 400 }
-      );
-    }
-    
-    // Check file size
-    if (audioFile.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        {
-          error: 'File too large',
-          message: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit`,
-        },
-        { status: 400 }
-      );
-    }
-    
-    // Initialize Groq client
-    const groq = new Groq({ apiKey });
-    
-    // Convert Blob to File with proper extension (Groq requires valid extension)
-    let fileToTranscribe: File;
-    
-    // Determine file extension from content type
-    const contentType = audioFile.type || 'audio/mpeg';
-    const extensionMap: Record<string, string> = {
-      'audio/mpeg': 'mp3',
-      'audio/mp3': 'mp3',
-      'audio/wav': 'wav',
-      'audio/x-wav': 'wav',
-      'audio/webm': 'webm',
-      'audio/ogg': 'ogg',
-      'audio/flac': 'flac',
-      'audio/m4a': 'm4a',
-      'audio/mp4': 'mp4',
-      'audio/x-m4a': 'm4a',
-    };
-    const extension = extensionMap[contentType] || 'mp3';
-    const fileName = `audio.${extension}`;
-    
-    console.log(`Processing audio: type=${contentType}, filename=${fileName}, size=${audioFile.size}`);
-    
-    if (audioFile instanceof File && audioFile.name && audioFile.name.includes('.')) {
-      // Use original file if it has a proper name
-      fileToTranscribe = audioFile;
+    const audio = formData.get('audio') as File | Blob;
+    const languages: string[] = JSON.parse((formData.get('languages') as string) || '["auto"]');
+
+    if (!audio) return NextResponse.json({ error: 'No audio' }, { status: 400 });
+    if (audio.size > MAX_SIZE) return NextResponse.json({ error: 'File exceeds 50MB' }, { status: 400 });
+
+    let fileToSend: File;
+
+    // Compress if too large for Groq
+    if (audio.size > GROQ_LIMIT) {
+      console.log(`[Transcribe] Compressing ${(audio.size / 1048576).toFixed(1)}MB...`);
+      if (!existsSync(TEMP_DIR)) await mkdir(TEMP_DIR, { recursive: true });
+      const uid = randomUUID();
+      tempIn = path.join(TEMP_DIR, `tin_${uid}`);
+      tempOut = path.join(TEMP_DIR, `tout_${uid}.mp3`);
+
+      await writeFile(tempIn, Buffer.from(await audio.arrayBuffer()));
+      await run('ffmpeg', ['-i', tempIn, '-ac', '1', '-ar', '16000', '-ab', '64k', '-f', 'mp3', tempOut, '-y']);
+      const compressed = await readFile(tempOut);
+      console.log(`[Transcribe] Compressed to ${(compressed.length / 1048576).toFixed(1)}MB`);
+      fileToSend = new File([compressed], 'audio.mp3', { type: 'audio/mpeg' });
     } else {
-      // Create a File from Blob with proper extension
-      fileToTranscribe = new File([audioFile], fileName, {
-        type: contentType,
-      });
+      const extMap: Record<string, string> = {
+        'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav',
+        'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/flac': 'flac',
+        'audio/m4a': 'm4a', 'audio/mp4': 'mp4', 'audio/x-m4a': 'm4a',
+      };
+      const ext = extMap[audio.type] || 'mp3';
+      fileToSend = new File([audio], `audio.${ext}`, { type: audio.type || 'audio/mpeg' });
+    }
+
+    // Find a Whisper-supported language from the selection
+    // For unsupported langs (Igbo, Pidgin, Twi, Zulu), fall back to auto-detect
+    // The LLM correction step will handle these languages later
+    const whisperLang = languages.find((l) => l !== 'auto' && WHISPER_LANGS.has(l));
+    const unsupported = languages.filter((l) => l !== 'auto' && !WHISPER_LANGS.has(l));
+    
+    if (unsupported.length > 0) {
+      console.log(`[Transcribe] Languages not in Whisper: ${unsupported.join(', ')} — using auto-detect, will correct via LLM`);
     }
     
-    // Prepare transcription options
-    const transcriptionOptions: Parameters<typeof groq.audio.transcriptions.create>[0] = {
-      file: fileToTranscribe,
+    console.log(`[Transcribe] Sending to Groq... whisperLang=${whisperLang || 'auto'}, allLangs=${languages.join(',')}`);
+
+    const groq = new Groq({ apiKey });
+    const result = await groq.audio.transcriptions.create({
+      file: fileToSend,
       model: 'whisper-large-v3',
       response_format: 'verbose_json',
-    };
-    
-    // Add language hint if not auto-detect
-    if (language !== 'auto') {
-      transcriptionOptions.language = language;
-    }
-    
-    // Perform transcription
-    console.log('Starting transcription...');
-    const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
-    
-    console.log('Transcription complete:', {
-      textLength: transcription.text?.length,
-      language: transcription.language,
+      ...(whisperLang ? { language: whisperLang } : {}),
     });
-    
-    // Extract detected language
-    const detectedLanguage = transcription.language || language || 'en';
-    
-    // Detect mixed languages
-    const detectedLanguages = detectMixedLanguages(transcription.text, detectedLanguage);
-    
-    // Try to identify song metadata if not provided
-    let suggestedTitle: string | undefined;
-    let suggestedArtist: string | undefined;
-    
-    if (!providedTitle || !providedArtist) {
-      const metadata = await extractMetadataFromText(transcription.text, groq);
-      suggestedTitle = providedTitle || metadata.title;
-      suggestedArtist = providedArtist || metadata.artist;
-    }
-    
-    // Build response
-    const result: TranscriptionResult = {
-      text: transcription.text,
-      language: LANGUAGE_NAMES[detectedLanguage] || detectedLanguage,
-      detectedLanguages,
-      duration: transcription.duration,
-      suggestedTitle,
-      suggestedArtist,
-    };
-    
-    // Include segments if available (from verbose_json)
-    if ('segments' in transcription && Array.isArray(transcription.segments)) {
-      result.segments = transcription.segments.map((seg: { start: number; end: number; text: string }) => ({
-        start: seg.start,
-        end: seg.end,
-        text: seg.text,
-      }));
-    }
-    
-    return NextResponse.json(result);
+
+    console.log(`[Transcribe] Done: ${result.text?.length} chars, detected=${result.language}`);
+
+    return NextResponse.json({
+      text: result.text,
+      language: result.language,
+      duration: result.duration,
+      languages, // Pass all selected languages through for LLM correction
+    });
   } catch (error) {
-    console.error('Transcription error:', error);
-    
-    // Handle specific Groq errors
-    if (error instanceof Error) {
-      if (error.message.includes('rate_limit')) {
-        return NextResponse.json(
-          {
-            error: 'Rate limited',
-            message: 'Too many requests. Please try again in a moment.',
-          },
-          { status: 429 }
-        );
-      }
-      if (error.message.includes('invalid_api_key')) {
-        return NextResponse.json(
-          {
-            error: 'Configuration error',
-            message: 'Transcription service not properly configured.',
-          },
-          { status: 500 }
-        );
-      }
-    }
-    
+    console.error('[Transcribe] Error:', error);
     return NextResponse.json(
-      {
-        error: 'Transcription failed',
-        message: error instanceof Error ? error.message : 'Failed to transcribe audio',
-      },
+      { error: 'Failed', message: error instanceof Error ? error.message : 'Transcription failed' },
       { status: 500 }
     );
+  } finally {
+    for (const p of [tempIn, tempOut]) {
+      if (p && existsSync(p)) await unlink(p).catch(() => {});
+    }
   }
 }

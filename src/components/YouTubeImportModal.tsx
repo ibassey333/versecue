@@ -629,7 +629,7 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
               <div className="flex items-center justify-between">
                 <p className="text-verse-text text-sm font-medium">{batchResults.filter(r => r.status === 'complete').length} songs ready</p>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={() => {
+                  <button type="button" onClick={(e) => {
                     const selected = batchResults.filter(r => r.status === 'complete' && r.selected);
                     if (selected.length === 0) return;
                     navigator.clipboard.writeText(
@@ -640,7 +640,12 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                         return r.title + (r.artist ? ' - ' + r.artist : '') + '\n\n' + body;
                       }).join('\n\n' + '='.repeat(40) + '\n\n')
                     );
-                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1 px-2 py-1 border border-verse-border rounded-lg">
+                    const btn = e.currentTarget;
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+                    btn.classList.add('text-green-400', 'border-green-400/30');
+                    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('text-green-400', 'border-green-400/30'); }, 1500);
+                  }} className="text-verse-muted text-xs hover:text-verse-text flex items-center gap-1 px-2 py-1 border border-verse-border rounded-lg transition-colors">
                     <Copy className="w-3 h-3" /> Copy
                   </button>
                   <button type="button" onClick={() => {
@@ -665,8 +670,16 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                       const selected = batchResults.filter(r => r.status === 'complete' && r.selected);
                       if (selected.length === 0) return;
                       const allSections = selected.flatMap((r, idx) => {
-                        const songHeader = { type: 'other' as const, label: (idx > 0 ? '---\n' : '') + r.title + (r.artist ? ' - ' + r.artist : ''), lyrics: '', order: 0 };
-                        return [songHeader, ...r.sections.map(s => ({ ...s }))];
+                        const titleLabel = r.title + (r.artist ? ' - ' + r.artist : '');
+                        const secs = r.sections.length > 0 
+                          ? r.sections.map(s => ({ ...s }))
+                          : [{ type: 'verse' as const, label: 'Lyrics', lyrics: r.lyrics, order: 1 }];
+                        if (idx > 0 && secs.length > 0) {
+                          secs[0] = { ...secs[0], label: '--- ' + titleLabel + ' ---\n' + secs[0].label };
+                        } else if (secs.length > 0) {
+                          secs[0] = { ...secs[0], label: titleLabel + '\n' + secs[0].label };
+                        }
+                        return secs;
                       });
                       try {
                         const res = await fetch('/api/import/export', {

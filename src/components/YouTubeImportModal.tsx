@@ -3,8 +3,8 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   X, Youtube, Upload, FileAudio, Clock, Loader2, Check,
-  AlertCircle, ChevronDown, Edit3, Save, Download,
-  Copy, FileText, Languages, CheckCircle2,
+  AlertCircle, ChevronDown, ChevronUp, Edit3, Save, Download,
+  Copy, FileText, Languages, CheckCircle2, Play, Pause,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Song, SongSection } from '@/types';
@@ -42,6 +42,15 @@ interface SongCardData {
   startTime: string;
   endTime: string;
   expanded: boolean;
+}
+
+// Transcription segment with timestamp (from Whisper)
+interface TranscriptionSegment {
+  start: number;
+  end: number;
+  startFormatted: string;
+  endFormatted: string;
+  text: string;
 }
 
 // ============================================================================
@@ -326,7 +335,7 @@ function SongCard({
                       value={data.startTime}
                       onChange={e => onUpdate({ startTime: e.target.value })}
                       placeholder="0:00"
-                      className="w-16 px-2 py-1 !bg-verse-bg border border-verse-border rounded-lg text-verse-text text-xs text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
+                      className="w-16 px-2 py-1 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-xs text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
                     />
                     <span className="text-verse-muted text-xs">→</span>
                     <input
@@ -334,7 +343,7 @@ function SongCard({
                       value={data.endTime}
                       onChange={e => onUpdate({ endTime: e.target.value })}
                       placeholder="5:00"
-                      className="w-16 px-2 py-1 !bg-verse-bg border border-verse-border rounded-lg text-verse-text text-xs text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
+                      className="w-16 px-2 py-1 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-xs text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
                     />
                   </div>
                 )}
@@ -354,6 +363,158 @@ function SongCard({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// YOUTUBE PLAYER (collapsible embed with controls)
+// ============================================================================
+function YouTubePlayer({ 
+  videoId, 
+  expanded, 
+  onToggle,
+  onSeek 
+}: { 
+  videoId: string; 
+  expanded: boolean; 
+  onToggle: () => void;
+  onSeek?: (time: number) => void;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [player, setPlayer] = useState<YT.Player | null>(null);
+
+  // Initialize YouTube API
+  useEffect(() => {
+    if (!expanded || !videoId) return;
+    
+    // Load YouTube IFrame API if not already loaded
+    if (!(window as unknown as { YT?: unknown }).YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScript = document.getElementsByTagName('script')[0];
+      firstScript.parentNode?.insertBefore(tag, firstScript);
+    }
+
+    // Initialize player when API is ready
+    const initPlayer = () => {
+      if (!iframeRef.current) return;
+      const newPlayer = new (window as unknown as { YT: typeof YT }).YT.Player(iframeRef.current, {
+        events: {
+          onReady: () => setPlayer(newPlayer),
+        },
+      });
+    };
+
+    if ((window as unknown as { YT?: { Player?: unknown } }).YT?.Player) {
+      initPlayer();
+    } else {
+      (window as unknown as { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = initPlayer;
+    }
+  }, [expanded, videoId]);
+
+  // Expose seek function
+  useEffect(() => {
+    if (onSeek && player) {
+      (window as unknown as { seekYouTubePlayer?: (time: number) => void }).seekYouTubePlayer = (time: number) => {
+        player.seekTo(time, true);
+        player.playVideo();
+      };
+    }
+    return () => {
+      delete (window as unknown as { seekYouTubePlayer?: unknown }).seekYouTubePlayer;
+    };
+  }, [player, onSeek]);
+
+  return (
+    <div className="border border-verse-border rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-verse-bg hover:bg-verse-border/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Youtube className="w-4 h-4 text-red-500" />
+          <span className="text-verse-text text-sm font-medium">Video Player</span>
+        </div>
+        {expanded ? <ChevronUp className="w-4 h-4 text-verse-muted" /> : <ChevronDown className="w-4 h-4 text-verse-muted" />}
+      </button>
+      
+      {expanded && (
+        <div className="aspect-video bg-black">
+          <iframe
+            ref={iframeRef}
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0&modestbranding=1`}
+            className="w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// TRANSCRIPTION SEGMENTS (clickable timestamps)
+// ============================================================================
+function TranscriptionView({ 
+  segments, 
+  onSeek,
+  onCopy 
+}: { 
+  segments: TranscriptionSegment[]; 
+  onSeek: (time: number) => void;
+  onCopy: (text: string) => void;
+}) {
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  const handleCopy = (text: string, idx: number) => {
+    onCopy(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 1500);
+  };
+
+  if (segments.length === 0) {
+    return (
+      <div className="h-64 flex items-center justify-center text-verse-muted text-sm">
+        No transcription segments available
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-64 overflow-y-auto">
+      <div className="space-y-1 p-2">
+        {segments.map((seg, i) => (
+          <div
+            key={i}
+            className="group flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-verse-border/30 transition-colors"
+          >
+            <button
+              type="button"
+              onClick={() => onSeek(seg.start)}
+              className="flex-shrink-0 px-2 py-0.5 bg-verse-border/50 hover:bg-gold-500/20 hover:text-gold-500 rounded text-xs font-mono text-verse-muted transition-colors"
+            >
+              {seg.startFormatted}
+            </button>
+            <p className="flex-1 text-verse-text text-sm leading-relaxed">{seg.text}</p>
+            <button
+              type="button"
+              onClick={() => handleCopy(seg.text, i)}
+              className={cn(
+                'flex-shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity',
+                copiedIdx === i ? 'text-green-400' : 'text-verse-muted hover:text-verse-text'
+              )}
+            >
+              {copiedIdx === i ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="text-verse-muted text-[10px] text-center py-2 border-t border-verse-border">
+        Click timestamp to jump • Hover to copy
+      </p>
     </div>
   );
 }
@@ -389,6 +550,12 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   
   // Batch song cards data
   const [batchCards, setBatchCards] = useState<SongCardData[]>([]);
+  
+  // Preview state (Phase 3)
+  const [previewTab, setPreviewTab] = useState<'lyrics' | 'transcription'>('lyrics');
+  const [videoExpanded, setVideoExpanded] = useState(false);
+  const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
+  const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -427,6 +594,9 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
     setProgress(0); setProgressMsg(''); setSteps([]);
     setLyrics(''); setSections([]); setError(null); setIsEditing(false);
     setSingleCard(null); setBatchCards([]);
+    // Reset preview state
+    setPreviewTab('lyrics'); setVideoExpanded(false);
+    setTranscriptionSegments([]); setPreviewVideoId(null);
   }, []);
 
   const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
@@ -548,10 +718,20 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   const addSegment = () => setServiceSegments(prev => [...prev, { title: '', start: '', end: '' }]);
   const removeSegment = (i: number) => setServiceSegments(prev => prev.filter((_, idx) => idx !== i));
 
+  // ---- Video seek helper ----
+  const handleVideoSeek = (time: number) => {
+    const seekFn = (window as unknown as { seekYouTubePlayer?: (time: number) => void }).seekYouTubePlayer;
+    if (seekFn) {
+      seekFn(time);
+      if (!videoExpanded) setVideoExpanded(true);
+    }
+  };
+
   // ==== PROCESS: Single song (URL or file) ====
   const handleSingleProcess = useCallback(async () => {
     const isUrl = parsedUrls.length > 0;
     setMode('single'); setStep('processing'); setError(null); setSections([]); setLyrics('');
+    setTranscriptionSegments([]); // Reset segments
     setSteps([
       { id: 'download', label: isUrl ? 'Downloading audio' : 'Preparing audio', status: 'pending' },
       { id: 'transcribe', label: 'Transcribing lyrics', status: 'pending' },
@@ -574,9 +754,12 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
         const vc = decodeURIComponent(res.headers.get('X-Video-Channel') || '');
         if (vt && !autoTitle) autoTitle = vt; if (vc && !autoArtist) autoArtist = vc;
         audioBlob = await res.blob();
+        // Store video ID for preview
+        setPreviewVideoId(singleCard.videoId);
       } else {
         audioBlob = files[0];
         if (!autoTitle) autoTitle = files[0].name.replace(/\.[^.]+$/, '');
+        setPreviewVideoId(null); // No video for file uploads
       }
 
       updateStep('download', 'complete'); setProgress(30);
@@ -585,8 +768,13 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
       const fd = new FormData(); fd.append('audio', audioBlob); fd.append('languages', JSON.stringify(languages));
       const tRes = await fetch('/api/import/transcribe', { method: 'POST', body: fd });
       if (!tRes.ok) { const e = await tRes.json().catch(() => ({})); throw new Error(e.message || 'Transcription failed'); }
-      const rawLyrics = (await tRes.json()).text || '';
+      const tData = await tRes.json();
+      const rawLyrics = tData.text || '';
       setLyrics(rawLyrics);
+      // Store transcription segments for editing UI
+      if (Array.isArray(tData.segments)) {
+        setTranscriptionSegments(tData.segments);
+      }
       updateStep('transcribe', 'complete'); setProgress(65);
 
       updateStep('format', 'active'); setProgress(75); setProgressMsg('Correcting & formatting...');
@@ -641,7 +829,8 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
         const blob = await dlRes.blob(); const fd = new FormData(); fd.append('audio', blob); fd.append('languages', JSON.stringify(languages));
         const tRes = await fetch('/api/import/transcribe', { method: 'POST', body: fd });
         if (!tRes.ok) throw new Error('Transcription failed');
-        results[i].lyrics = (await tRes.json()).text;
+        const tData = await tRes.json();
+        results[i].lyrics = tData.text || '';
 
         results[i].status = 'formatting'; setBatchResults([...results]);
         const fRes = await fetch('/api/import/format-lyrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lyrics: results[i].lyrics, languages, title: results[i].title }) });
@@ -667,7 +856,8 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
         const fd = new FormData(); fd.append('audio', files[i]); fd.append('languages', JSON.stringify(languages));
         const tRes = await fetch('/api/import/transcribe', { method: 'POST', body: fd });
         if (!tRes.ok) throw new Error('Transcription failed');
-        results[i].lyrics = (await tRes.json()).text;
+        const tData = await tRes.json();
+        results[i].lyrics = tData.text || '';
 
         results[i].status = 'formatting'; setBatchResults([...results]);
         const fRes = await fetch('/api/import/format-lyrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lyrics: results[i].lyrics, languages, title: results[i].title }) });
@@ -724,7 +914,8 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
           const fd = new FormData(); fd.append('audio', audioBlob); fd.append('languages', JSON.stringify(languages));
           const tRes = await fetch('/api/import/transcribe', { method: 'POST', body: fd });
           if (!tRes.ok) throw new Error('Transcription failed');
-          results[i].lyrics = (await tRes.json()).text;
+          const tData = await tRes.json();
+          results[i].lyrics = tData.text || '';
 
           results[i].status = 'formatting'; setBatchResults([...results]);
           try {
@@ -1027,6 +1218,7 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
           {/* ========== PREVIEW (single) ========== */}
           {step === 'preview' && mode === 'single' && (
             <div className="space-y-4">
+              {/* Title & Artist */}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-verse-muted text-xs mb-1">Song Title</label>
                   <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter title"
@@ -1035,27 +1227,82 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                   <input type="text" value={artist} onChange={e => setArtist(e.target.value)} placeholder="Enter artist"
                     className="w-full px-3 py-2 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50" /></div>
               </div>
+              
+              {/* Collapsible Video Player (only for YouTube imports) */}
+              {previewVideoId && (
+                <YouTubePlayer
+                  videoId={previewVideoId}
+                  expanded={videoExpanded}
+                  onToggle={() => setVideoExpanded(!videoExpanded)}
+                  onSeek={handleVideoSeek}
+                />
+              )}
+              
+              {/* Tabs + Content */}
               <div className="border border-verse-border rounded-xl overflow-hidden">
+                {/* Tab Header */}
                 <div className="flex items-center justify-between px-4 py-2.5 bg-verse-bg border-b border-verse-border">
-                  <span className="text-verse-text text-sm font-medium">Lyrics</span>
+                  <div className="flex items-center gap-1">
+                    {previewVideoId && transcriptionSegments.length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTab('lyrics')}
+                          className={cn(
+                            'px-3 py-1 rounded-lg text-sm font-medium transition-colors',
+                            previewTab === 'lyrics' ? 'bg-gold-500/20 text-gold-500' : 'text-verse-muted hover:text-verse-text'
+                          )}
+                        >
+                          Lyrics
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTab('transcription')}
+                          className={cn(
+                            'px-3 py-1 rounded-lg text-sm font-medium transition-colors',
+                            previewTab === 'transcription' ? 'bg-gold-500/20 text-gold-500' : 'text-verse-muted hover:text-verse-text'
+                          )}
+                        >
+                          Transcription
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-verse-text text-sm font-medium">Lyrics</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <ExportMenu title={title} artist={artist} sections={sections} lyrics={lyrics} />
-                    <button type="button" onClick={() => setIsEditing(!isEditing)}
-                      className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors',
-                        isEditing ? 'bg-gold-500 text-black font-semibold' : 'text-verse-muted hover:text-verse-text hover:bg-verse-border/50')}>
-                      <Edit3 className="w-3 h-3" /> {isEditing ? 'Done' : 'Edit'}
-                    </button>
+                    {previewTab === 'lyrics' && (
+                      <button type="button" onClick={() => setIsEditing(!isEditing)}
+                        className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors',
+                          isEditing ? 'bg-gold-500 text-black font-semibold' : 'text-verse-muted hover:text-verse-text hover:bg-verse-border/50')}>
+                        <Edit3 className="w-3 h-3" /> {isEditing ? 'Done' : 'Edit'}
+                      </button>
+                    )}
                   </div>
                 </div>
-                {isEditing ? (
-                  <textarea defaultValue={sections.length > 0 ? sections.map(s => '[' + s.label + ']\n' + s.lyrics).join('\n\n') : lyrics}
-                    onChange={e => setLyrics(e.target.value)} style={{ backgroundColor: '#0d0d1a', border: 'none', outline: 'none' }}
-                    className="w-full h-64 px-4 py-3 text-verse-text text-sm resize-none font-mono" />
+                
+                {/* Tab Content */}
+                {previewTab === 'lyrics' ? (
+                  isEditing ? (
+                    <textarea defaultValue={sections.length > 0 ? sections.map(s => '[' + s.label + ']\n' + s.lyrics).join('\n\n') : lyrics}
+                      onChange={e => setLyrics(e.target.value)} style={{ backgroundColor: '#0d0d1a', border: 'none', outline: 'none' }}
+                      className="w-full h-64 px-4 py-3 text-verse-text text-sm resize-none font-mono" />
+                  ) : (
+                    <div className="h-64 overflow-y-auto px-4 py-3">{renderSections(sections, lyrics)}</div>
+                  )
                 ) : (
-                  <div className="h-64 overflow-y-auto px-4 py-3">{renderSections(sections, lyrics)}</div>
+                  <TranscriptionView
+                    segments={transcriptionSegments}
+                    onSeek={handleVideoSeek}
+                    onCopy={(text) => navigator.clipboard.writeText(text)}
+                  />
                 )}
               </div>
-              {sections.length > 0 && <p className="text-verse-muted text-xs text-center">{sections.length} sections detected</p>}
+              
+              {sections.length > 0 && previewTab === 'lyrics' && (
+                <p className="text-verse-muted text-xs text-center">{sections.length} sections detected</p>
+              )}
               {error && <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm"><AlertCircle className="w-4 h-4" /> {error}</div>}
             </div>
           )}

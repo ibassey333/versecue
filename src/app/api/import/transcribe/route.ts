@@ -45,6 +45,17 @@ function run(cmd: string, args: string[]): Promise<{ stdout: string; stderr: str
   });
 }
 
+// Format seconds to mm:ss or h:mm:ss
+function formatTimestamp(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
@@ -107,13 +118,26 @@ export async function POST(request: NextRequest) {
       ...(whisperLang ? { language: whisperLang } : {}),
     });
 
-    console.log(`[Transcribe] Done: ${result.text?.length} chars, detected=${result.language}`);
+    // Extract segments with timestamps for the editing UI
+    // Whisper verbose_json returns segments array with start/end times
+    const rawSegments = (result as unknown as { segments?: Array<{ start: number; end: number; text: string }> }).segments || [];
+    
+    const segments = rawSegments.map((seg) => ({
+      start: seg.start,
+      end: seg.end,
+      startFormatted: formatTimestamp(seg.start),
+      endFormatted: formatTimestamp(seg.end),
+      text: seg.text.trim(),
+    }));
+
+    console.log(`[Transcribe] Done: ${result.text?.length} chars, ${segments.length} segments, detected=${result.language}`);
 
     return NextResponse.json({
       text: result.text,
       language: result.language,
       duration: result.duration,
       languages, // Pass all selected languages through for LLM correction
+      segments,  // NEW: timestamped segments for editing UI
     });
   } catch (error) {
     console.error('[Transcribe] Error:', error);

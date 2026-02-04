@@ -1,7 +1,6 @@
 // ============================================
 // OBS Integration Types
 // ============================================
-
 export type OBSConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface OBSScene {
@@ -16,7 +15,8 @@ export interface OBSTransition {
 }
 
 export interface OBSSettings {
-  enabled: boolean;
+  showPanel: boolean; // Whether to show OBS panel in UI at all
+  enabled: boolean; // Whether OBS connection is active
   host: string;
   port: number;
   password: string;
@@ -46,6 +46,7 @@ export interface OBSState {
 }
 
 export const DEFAULT_OBS_SETTINGS: OBSSettings = {
+  showPanel: false, // Hidden by default - users enable in settings
   enabled: false,
   host: 'localhost',
   port: 4455,

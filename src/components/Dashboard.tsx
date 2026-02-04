@@ -948,6 +948,8 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   const addTranscriptSegment = useSessionStore((s) => s.addTranscriptSegment);
   const setInterimTranscript = useSessionStore((s) => s.setInterimTranscript);
   const setStoreAudioLevel = useSessionStore((s) => s.setAudioLevel);
+  const obsSettings = useSessionStore((s) => s.obsSettings);
+  const updateOBSSettings = useSessionStore((s) => s.updateOBSSettings);
   
   useEffect(() => {
     if (isListening) {
@@ -1196,6 +1198,8 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
         groqAvailable={true}
         autoApprove={settings.autoApproveHighConfidence}
         onAutoApproveChange={(e: boolean) => updateSettings({ autoApproveHighConfidence: e })}
+        showOBSPanel={obsSettings.showPanel}
+        onShowOBSPanelChange={(show: boolean) => updateOBSSettings({ ...obsSettings, showPanel: show })}
         apiStatus={{
           bible: 'connected',
           deepgram: 'connected',

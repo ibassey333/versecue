@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from 'react';
-import { X, Mic, Brain, Sparkles, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Mic, Brain, Sparkles, Check, AlertCircle, Loader2, Monitor } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SettingsDrawerProps {
@@ -23,6 +23,9 @@ interface SettingsDrawerProps {
     deepgram: 'connected' | 'error' | 'loading';
     groq: 'connected' | 'error' | 'loading';
   };
+  // OBS settings
+  showOBSPanel?: boolean;
+  onShowOBSPanelChange?: (show: boolean) => void;
 }
 
 export function SettingsDrawer({
@@ -40,6 +43,8 @@ export function SettingsDrawer({
   autoApprove,
   onAutoApproveChange,
   apiStatus,
+  showOBSPanel = false,
+  onShowOBSPanelChange,
 }: SettingsDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -227,6 +232,32 @@ export function SettingsDrawer({
                 <div className={cn(
                   'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
                   autoApprove ? 'translate-x-5' : 'translate-x-0.5'
+                )} />
+              </button>
+            </div>
+          </section>
+
+          {/* OBS Integration */}
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Monitor className="w-4 h-4 text-gold-500" />
+              <h3 className="text-sm font-semibold text-verse-text uppercase tracking-wide">Integrations</h3>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3 bg-verse-surface rounded-xl border border-verse-border">
+              <div>
+                <h3 className="text-sm font-medium text-verse-text">OBS Studio</h3>
+                <p className="text-xs text-verse-muted mt-0.5">Control OBS scenes remotely</p>
+              </div>
+              <button
+                onClick={() => onShowOBSPanelChange?.(!showOBSPanel)}
+                className={cn(
+                  'relative w-11 h-6 rounded-full transition-colors',
+                  showOBSPanel ? 'bg-gold-500' : 'bg-verse-border'
+                )}
+              >
+                <div className={cn(
+                  'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+                  showOBSPanel ? 'translate-x-5' : 'translate-x-0.5'
                 )} />
               </button>
             </div>

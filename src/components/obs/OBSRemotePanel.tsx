@@ -61,6 +61,11 @@ export function OBSRemotePanel({ className, defaultExpanded = true }: OBSRemoteP
     setFormPassword(settings.password);
   }, [settings]);
 
+  // Don't render if panel is hidden in settings
+  if (!settings.showPanel) {
+    return null;
+  }
+
   // Handle test connection
   const handleTest = async () => {
     setTesting(true);
@@ -90,6 +95,13 @@ export function OBSRemotePanel({ className, defaultExpanded = true }: OBSRemoteP
     }
   };
 
+  // Handle header click - toggle setup panel when not enabled
+  const handleHeaderClick = () => {
+    if (!settings.enabled) {
+      setShowSetup(!showSetup);
+    }
+  };
+
   // ==========================================
   // DISABLED STATE - Show setup prompt
   // ==========================================
@@ -97,7 +109,7 @@ export function OBSRemotePanel({ className, defaultExpanded = true }: OBSRemoteP
     return (
       <div className={cn('rounded-xl border border-verse-border bg-verse-surface overflow-hidden', className)}>
         <button
-          onClick={() => setShowSetup(true)}
+          onClick={handleHeaderClick}
           className="w-full flex items-center gap-3 px-4 py-3 hover:bg-verse-elevated/50 transition-colors"
         >
           <div className="w-8 h-8 rounded-lg bg-verse-border flex items-center justify-center">
@@ -105,12 +117,12 @@ export function OBSRemotePanel({ className, defaultExpanded = true }: OBSRemoteP
           </div>
           <div className="flex-1 text-left">
             <p className="text-sm font-medium text-verse-muted">OBS Remote</p>
-            <p className="text-xs text-verse-subtle">Tap to set up</p>
+            <p className="text-xs text-verse-subtle">{showSetup ? 'Tap to close' : 'Tap to set up'}</p>
           </div>
           <OBSStatusDot status="disconnected" pulse={false} />
         </button>
 
-        {/* Setup Modal */}
+        {/* Setup Panel */}
         <AnimatePresence>
           {showSetup && (
             <motion.div
@@ -206,14 +218,6 @@ export function OBSRemotePanel({ className, defaultExpanded = true }: OBSRemoteP
                     Connect
                   </button>
                 </div>
-
-                {/* Cancel */}
-                <button
-                  onClick={() => setShowSetup(false)}
-                  className="w-full text-xs text-verse-muted hover:text-verse-text transition-colors"
-                >
-                  Cancel
-                </button>
               </div>
             </motion.div>
           )}

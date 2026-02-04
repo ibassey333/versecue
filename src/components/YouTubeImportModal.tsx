@@ -20,7 +20,6 @@ interface YouTubeImportModalProps {
 }
 
 type Step = 'input' | 'processing' | 'preview' | 'complete';
-type TimeMode = 'full' | 'section' | 'service';
 
 interface BatchResult {
   url: string; title: string; artist: string;
@@ -31,8 +30,8 @@ interface BatchResult {
 interface ProcessStep { id: string; label: string; status: 'pending' | 'active' | 'complete' | 'error'; }
 interface ServiceSegment { title: string; start: string; end: string; }
 
-// Batch URL item with per-song metadata and time controls
-interface BatchUrlItem {
+// Song card data (used for both single and batch)
+interface SongCardData {
   url: string;
   videoId: string | null;
   title: string;
@@ -244,28 +243,30 @@ function ExportMenu({ title, artist, sections, lyrics }: { title: string; artist
 }
 
 // ============================================================================
-// BATCH URL CARD (premium song card with thumbnail + time controls)
+// SONG CARD (unified component for single and batch)
 // ============================================================================
-function BatchUrlCard({ 
-  item, 
+function SongCard({ 
+  data, 
   index,
+  showRemove = false,
   onUpdate,
   onRemove 
 }: { 
-  item: BatchUrlItem; 
-  index: number;
-  onUpdate: (updates: Partial<BatchUrlItem>) => void;
-  onRemove: () => void;
+  data: SongCardData; 
+  index?: number;
+  showRemove?: boolean;
+  onUpdate: (updates: Partial<SongCardData>) => void;
+  onRemove?: () => void;
 }) {
-  const thumbnailUrl = item.videoId ? `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg` : null;
+  const thumbnailUrl = data.videoId ? `https://img.youtube.com/vi/${data.videoId}/mqdefault.jpg` : null;
   
   return (
     <div className="bg-verse-bg rounded-xl border border-verse-border overflow-hidden transition-all duration-200">
       {/* Main row */}
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex items-start gap-3 p-3">
         {/* Thumbnail or skeleton */}
-        <div className="w-16 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-verse-border">
-          {item.loading ? (
+        <div className="w-20 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-verse-border">
+          {data.loading ? (
             <div className="w-full h-full animate-pulse bg-verse-border" />
           ) : thumbnailUrl ? (
             <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
@@ -276,94 +277,83 @@ function BatchUrlCard({
           )}
         </div>
         
-        {/* Title + channel or skeleton */}
+        {/* Content */}
         <div className="flex-1 min-w-0">
-          {item.loading ? (
+          {data.loading ? (
             <div className="space-y-1.5">
               <div className="h-4 w-3/4 bg-verse-border rounded animate-pulse" />
               <div className="h-3 w-1/2 bg-verse-border rounded animate-pulse" />
             </div>
-          ) : item.error ? (
+          ) : data.error ? (
             <div className="flex items-center gap-2 text-red-400">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm truncate">{item.error}</span>
+              <span className="text-sm truncate">{data.error}</span>
             </div>
           ) : (
             <>
-              <p className="text-verse-text text-sm font-medium truncate">{item.title || `Song ${index + 1}`}</p>
-              <p className="text-verse-muted text-xs truncate">{item.channel || 'YouTube'}</p>
+              <p className="text-verse-text text-sm font-medium truncate">{data.title || `Song ${(index ?? 0) + 1}`}</p>
+              <p className="text-verse-muted text-xs truncate">{data.channel || 'YouTube'}</p>
+              
+              {/* Time controls inline */}
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`timeMode-${index ?? 'single'}`}
+                      checked={data.timeMode === 'full'}
+                      onChange={() => onUpdate({ timeMode: 'full', expanded: false })}
+                      className="w-3.5 h-3.5 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500"
+                    />
+                    <span className="text-verse-text text-xs">Full video</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`timeMode-${index ?? 'single'}`}
+                      checked={data.timeMode === 'section'}
+                      onChange={() => onUpdate({ timeMode: 'section', expanded: true })}
+                      className="w-3.5 h-3.5 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500"
+                    />
+                    <span className="text-verse-text text-xs">Extract section</span>
+                  </label>
+                </div>
+                
+                {data.timeMode === 'section' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={data.startTime}
+                      onChange={e => onUpdate({ startTime: e.target.value })}
+                      placeholder="0:00"
+                      className="w-16 px-2 py-1 !bg-verse-bg border border-verse-border rounded-lg text-verse-text text-xs text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
+                    />
+                    <span className="text-verse-muted text-xs">→</span>
+                    <input
+                      type="text"
+                      value={data.endTime}
+                      onChange={e => onUpdate({ endTime: e.target.value })}
+                      placeholder="5:00"
+                      className="w-16 px-2 py-1 !bg-verse-bg border border-verse-border rounded-lg text-verse-text text-xs text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
+                    />
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
         
-        {/* Time mode dropdown trigger */}
-        <button
-          type="button"
-          onClick={() => onUpdate({ expanded: !item.expanded })}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-verse-muted hover:text-verse-text bg-verse-bg border border-verse-border rounded-lg transition-colors"
-        >
-          <Clock className="w-3 h-3" />
-          <span>{item.timeMode === 'full' ? 'Full' : `${item.startTime || '0:00'} → ${item.endTime || '5:00'}`}</span>
-          <ChevronDown className={cn('w-3 h-3 transition-transform', item.expanded && 'rotate-180')} />
-        </button>
-        
-        {/* Remove button */}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="p-1.5 text-verse-muted hover:text-red-400 hover:bg-verse-border/50 rounded-lg transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        {/* Remove button (batch only) */}
+        {showRemove && onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="p-1.5 text-verse-muted hover:text-red-400 hover:bg-verse-border/50 rounded-lg transition-colors flex-shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
-      
-      {/* Expanded time controls */}
-      {item.expanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-verse-border/50 space-y-2">
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name={`timeMode-${index}`}
-                checked={item.timeMode === 'full'}
-                onChange={() => onUpdate({ timeMode: 'full' })}
-                className="w-3.5 h-3.5 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500"
-              />
-              <span className="text-verse-text text-sm">Full video</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name={`timeMode-${index}`}
-                checked={item.timeMode === 'section'}
-                onChange={() => onUpdate({ timeMode: 'section' })}
-                className="w-3.5 h-3.5 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500"
-              />
-              <span className="text-verse-text text-sm">Extract section</span>
-            </label>
-          </div>
-          
-          {item.timeMode === 'section' && (
-            <div className="flex items-center gap-2 ml-6">
-              <input
-                type="text"
-                value={item.startTime}
-                onChange={e => onUpdate({ startTime: e.target.value })}
-                placeholder="0:00"
-                className="w-20 px-2.5 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
-              />
-              <span className="text-verse-muted text-sm">→</span>
-              <input
-                type="text"
-                value={item.endTime}
-                onChange={e => onUpdate({ endTime: e.target.value })}
-                placeholder="5:00"
-                className="w-20 px-2.5 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50"
-              />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -380,10 +370,8 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [languages, setLanguages] = useState<string[]>(['auto']);
-  const [timeMode, setTimeMode] = useState<TimeMode>('full');
-  const [startTime, setStartTime] = useState('0:00');
-  const [endTime, setEndTime] = useState('5:00');
   const [serviceSegments, setServiceSegments] = useState<ServiceSegment[]>([{ title: '', start: '', end: '' }]);
+  const [serviceExpanded, setServiceExpanded] = useState(false);
   const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
   const [batchCopied, setBatchCopied] = useState(false);
@@ -395,11 +383,12 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isDrag, setIsDrag] = useState(false);
-  const [videoTitle, setVideoTitle] = useState('');
-  const [timeExpanded, setTimeExpanded] = useState(false);
   
-  // Batch URL items with per-song metadata
-  const [batchUrlItems, setBatchUrlItems] = useState<BatchUrlItem[]>([]);
+  // Single song card data
+  const [singleCard, setSingleCard] = useState<SongCardData | null>(null);
+  
+  // Batch song cards data
+  const [batchCards, setBatchCards] = useState<SongCardData[]>([]);
   
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -411,20 +400,20 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   const isMultiUrl = parsedUrls.length > 1 && files.length === 0;
   const isSingleFile = files.length === 1 && parsedUrls.length === 0;
   const isMultiFile = files.length > 1 && parsedUrls.length === 0;
-  const isService = isSingleUrl && timeMode === 'service';
+  const isService = isSingleUrl && serviceExpanded && serviceSegments.some(s => s.start.trim() || s.end.trim());
   const hasInput = parsedUrls.length > 0 || files.length > 0;
-  const firstUrlId = isSingleUrl ? ytId(parsedUrls[0].url) : null;
 
   const validSegments = serviceSegments.filter(s => s.start.trim() && s.end.trim());
   const canProcess = (() => {
     if (!hasInput) return false;
     if (isService) return validSegments.length > 0;
-    if (isMultiUrl) return batchUrlItems.length > 0 && batchUrlItems.every(item => !item.loading);
+    if (isSingleUrl) return singleCard && !singleCard.loading;
+    if (isMultiUrl) return batchCards.length > 0 && batchCards.every(card => !card.loading);
     return true;
   })();
   const processButtonText = (() => {
     if (isService) return `Extract ${validSegments.length} Song${validSegments.length !== 1 ? 's' : ''}`;
-    if (isMultiUrl) return `Import ${batchUrlItems.length} Song${batchUrlItems.length !== 1 ? 's' : ''}`;
+    if (isMultiUrl) return `Import ${batchCards.length} Song${batchCards.length !== 1 ? 's' : ''}`;
     if (isMultiFile) return `Import ${files.length} Song${files.length !== 1 ? 's' : ''}`;
     return 'Extract & Transcribe';
   })();
@@ -432,41 +421,71 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
   // ---- Lifecycle ----
   const reset = useCallback(() => {
     setStep('input'); setMode('single'); setUrlInput(''); setFiles([]);
-    setTitle(''); setArtist(''); setLanguages(['auto']); setTimeMode('full');
-    setStartTime('0:00'); setEndTime('5:00');
-    setServiceSegments([{ title: '', start: '', end: '' }]);
+    setTitle(''); setArtist(''); setLanguages(['auto']);
+    setServiceSegments([{ title: '', start: '', end: '' }]); setServiceExpanded(false);
     setBatchResults([]); setPreviewIdx(null); setBatchCopied(false);
     setProgress(0); setProgressMsg(''); setSteps([]);
     setLyrics(''); setSections([]); setError(null); setIsEditing(false);
-    setVideoTitle(''); setTimeExpanded(false); setBatchUrlItems([]);
+    setSingleCard(null); setBatchCards([]);
   }, []);
 
   const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
 
-  // Fetch video info for single URL
+  // Build single card when single URL detected
   useEffect(() => {
-    if (!isSingleUrl) { setVideoTitle(''); return; }
-    const id = ytId(parsedUrls[0].url);
-    if (!id) return;
-    fetch('https://noembed.com/embed?url=https://www.youtube.com/watch?v=' + id)
-      .then(r => r.json()).then(d => setVideoTitle(d.title || '')).catch(() => {});
-  }, [isSingleUrl, parsedUrls]);
-
-  // Build batch URL items when multiple URLs are detected
-  useEffect(() => {
-    if (!isMultiUrl) {
-      setBatchUrlItems([]);
+    if (!isSingleUrl) {
+      setSingleCard(null);
       return;
     }
     
-    // Create items for each URL
-    const newItems: BatchUrlItem[] = parsedUrls.map((parsed, i) => {
+    const parsed = parsedUrls[0];
+    const videoId = ytId(parsed.url);
+    
+    // Check if we already have this URL
+    if (singleCard && singleCard.url === parsed.url) return;
+    
+    const newCard: SongCardData = {
+      url: parsed.url,
+      videoId,
+      title: '',
+      channel: '',
+      loading: true,
+      error: null,
+      timeMode: parsed.start && parsed.end ? 'section' : 'full',
+      startTime: parsed.start || '0:00',
+      endTime: parsed.end || '5:00',
+      expanded: !!(parsed.start && parsed.end),
+    };
+    
+    setSingleCard(newCard);
+    
+    // Fetch video info
+    if (videoId) {
+      fetch('https://noembed.com/embed?url=https://www.youtube.com/watch?v=' + videoId)
+        .then(r => r.json())
+        .then(d => {
+          setSingleCard(prev => prev ? { ...prev, title: d.title || '', channel: d.author_name || '', loading: false } : null);
+        })
+        .catch(() => {
+          setSingleCard(prev => prev ? { ...prev, error: 'Failed to load video info', loading: false } : null);
+        });
+    }
+  }, [isSingleUrl, parsedUrls]);
+
+  // Build batch cards when multiple URLs detected
+  useEffect(() => {
+    if (!isMultiUrl) {
+      setBatchCards([]);
+      return;
+    }
+    
+    // Create cards for each URL
+    const newCards: SongCardData[] = parsedUrls.map((parsed, i) => {
       const videoId = ytId(parsed.url);
-      // Check if we already have this URL in our items
-      const existing = batchUrlItems.find(item => item.url === parsed.url);
-      if (existing) {
-        return existing;
-      }
+      // Check if we already have this URL
+      const existing = batchCards.find(card => card.url === parsed.url);
+      if (existing) return existing;
+      
       return {
         url: parsed.url,
         videoId,
@@ -481,21 +500,21 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
       };
     });
     
-    setBatchUrlItems(newItems);
+    setBatchCards(newCards);
     
-    // Fetch info for each new item
-    newItems.forEach((item, i) => {
-      if (item.loading && item.videoId) {
-        fetch('https://noembed.com/embed?url=https://www.youtube.com/watch?v=' + item.videoId)
+    // Fetch info for each new card
+    newCards.forEach((card, i) => {
+      if (card.loading && card.videoId) {
+        fetch('https://noembed.com/embed?url=https://www.youtube.com/watch?v=' + card.videoId)
           .then(r => r.json())
           .then(d => {
-            setBatchUrlItems(prev => prev.map((it, idx) => 
-              idx === i ? { ...it, title: d.title || '', channel: d.author_name || '', loading: false } : it
+            setBatchCards(prev => prev.map((c, idx) => 
+              idx === i ? { ...c, title: d.title || '', channel: d.author_name || '', loading: false } : c
             ));
           })
           .catch(() => {
-            setBatchUrlItems(prev => prev.map((it, idx) => 
-              idx === i ? { ...it, error: 'Failed to load', loading: false } : it
+            setBatchCards(prev => prev.map((c, idx) => 
+              idx === i ? { ...c, error: 'Failed to load', loading: false } : c
             ));
           });
       }
@@ -506,15 +525,17 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
     setSteps(prev => prev.map(s => s.id === id ? { ...s, status } : s));
   };
 
-  // ---- Batch URL item helpers ----
-  const updateBatchItem = (index: number, updates: Partial<BatchUrlItem>) => {
-    setBatchUrlItems(prev => prev.map((item, i) => i === index ? { ...item, ...updates } : item));
+  // ---- Card update helpers ----
+  const updateSingleCard = (updates: Partial<SongCardData>) => {
+    setSingleCard(prev => prev ? { ...prev, ...updates } : null);
   };
   
-  const removeBatchItem = (index: number) => {
-    // Remove from items
-    setBatchUrlItems(prev => prev.filter((_, i) => i !== index));
-    // Also update the URL input
+  const updateBatchCard = (index: number, updates: Partial<SongCardData>) => {
+    setBatchCards(prev => prev.map((card, i) => i === index ? { ...card, ...updates } : card));
+  };
+  
+  const removeBatchCard = (index: number) => {
+    setBatchCards(prev => prev.filter((_, i) => i !== index));
     const lines = urlInput.split('\n').filter(line => line.trim());
     lines.splice(index, 1);
     setUrlInput(lines.join('\n'));
@@ -541,9 +562,12 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
       setProgressMsg(isUrl ? 'Downloading from YouTube...' : 'Preparing audio...');
 
       let audioBlob: Blob; let autoTitle = title; let autoArtist = artist;
-      if (isUrl) {
-        const body: Record<string, unknown> = { url: parsedUrls[0].url };
-        if (timeMode === 'section') { body.startTime = parseTime(startTime); body.endTime = parseTime(endTime); }
+      if (isUrl && singleCard) {
+        const body: Record<string, unknown> = { url: singleCard.url };
+        if (singleCard.timeMode === 'section') {
+          body.startTime = parseTime(singleCard.startTime);
+          body.endTime = parseTime(singleCard.endTime);
+        }
         const res = await fetch('/api/import/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Download failed'); }
         const vt = decodeURIComponent(res.headers.get('X-Video-Title') || '');
@@ -580,14 +604,14 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
       setTitle(autoTitle); setArtist(autoArtist);
       updateStep('format', 'complete'); setProgress(100); setStep('preview');
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed'); setStep('input'); }
-  }, [parsedUrls, files, title, artist, languages, timeMode, startTime, endTime]);
+  }, [parsedUrls, singleCard, files, title, artist, languages]);
 
   // ==== PROCESS: Batch URLs (with per-song time settings) ====
   const handleBatchUrlProcess = useCallback(async () => {
-    const results: BatchResult[] = batchUrlItems.map(item => ({
-      url: item.url,
-      title: item.title || '',
-      artist: item.channel || '',
+    const results: BatchResult[] = batchCards.map(card => ({
+      url: card.url,
+      title: card.title || '',
+      artist: card.channel || '',
       status: 'pending' as const,
       lyrics: '',
       sections: [],
@@ -597,22 +621,21 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
     setBatchResults(results); setMode('batch'); setStep('processing');
     setSteps([{ id: 'batch', label: 'Starting batch...', status: 'active' }]);
 
-    for (let i = 0; i < batchUrlItems.length; i++) {
-      const item = batchUrlItems[i];
-      setSteps([{ id: 'batch', label: `Processing ${i+1} of ${batchUrlItems.length}`, status: 'active' }]);
-      setProgress((i / batchUrlItems.length) * 100); setProgressMsg(`Song ${i+1} of ${batchUrlItems.length}`);
+    for (let i = 0; i < batchCards.length; i++) {
+      const card = batchCards[i];
+      setSteps([{ id: 'batch', label: `Processing ${i+1} of ${batchCards.length}`, status: 'active' }]);
+      setProgress((i / batchCards.length) * 100); setProgressMsg(`Song ${i+1} of ${batchCards.length}`);
       try {
         results[i].status = 'downloading'; setBatchResults([...results]);
-        const body: Record<string, unknown> = { url: item.url };
-        // Use per-song time settings
-        if (item.timeMode === 'section') {
-          body.startTime = parseTime(item.startTime);
-          body.endTime = parseTime(item.endTime);
+        const body: Record<string, unknown> = { url: card.url };
+        if (card.timeMode === 'section') {
+          body.startTime = parseTime(card.startTime);
+          body.endTime = parseTime(card.endTime);
         }
         const dlRes = await fetch('/api/import/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!dlRes.ok) throw new Error('Download failed');
-        results[i].title = item.title || decodeURIComponent(dlRes.headers.get('X-Video-Title') || 'Song ' + (i+1));
-        results[i].artist = item.channel || decodeURIComponent(dlRes.headers.get('X-Video-Channel') || '');
+        results[i].title = card.title || decodeURIComponent(dlRes.headers.get('X-Video-Title') || 'Song ' + (i+1));
+        results[i].artist = card.channel || decodeURIComponent(dlRes.headers.get('X-Video-Channel') || '');
 
         results[i].status = 'transcribing'; setBatchResults([...results]);
         const blob = await dlRes.blob(); const fd = new FormData(); fd.append('audio', blob); fd.append('languages', JSON.stringify(languages));
@@ -627,8 +650,8 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
       } catch (err) { results[i].status = 'error'; results[i].error = err instanceof Error ? err.message : 'Failed'; }
       setBatchResults([...results]);
     }
-    setProgress(100); setSteps([{ id: 'batch', label: `${results.filter(r => r.status === 'complete').length} of ${batchUrlItems.length} complete`, status: 'complete' }]); setStep('preview');
-  }, [batchUrlItems, languages]);
+    setProgress(100); setSteps([{ id: 'batch', label: `${results.filter(r => r.status === 'complete').length} of ${batchCards.length} complete`, status: 'complete' }]); setStep('preview');
+  }, [batchCards, languages]);
 
   // ==== PROCESS: Multiple files ====
   const handleMultiFileProcess = useCallback(async () => {
@@ -853,40 +876,38 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                 )
               )}
 
-              {/* ---- Single URL: thumbnail preview ---- */}
-              {isSingleUrl && firstUrlId && (
-                <div className="flex items-center gap-3 p-3 bg-verse-bg rounded-xl border border-verse-border">
-                  <img src={'https://img.youtube.com/vi/' + firstUrlId + '/mqdefault.jpg'} alt="" className="w-20 h-14 rounded-lg object-cover flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-verse-text text-sm font-medium truncate">{videoTitle || 'Loading...'}</p>
-                    <p className="text-green-400 text-xs">Ready to import</p>
-                  </div>
-                </div>
+              {/* ---- Single URL: Song card ---- */}
+              {isSingleUrl && singleCard && (
+                <SongCard
+                  data={singleCard}
+                  onUpdate={updateSingleCard}
+                />
               )}
 
-              {/* ---- Multi URL: Song cards with thumbnails ---- */}
-              {isMultiUrl && batchUrlItems.length > 0 && (
+              {/* ---- Multi URL: Song cards ---- */}
+              {isMultiUrl && batchCards.length > 0 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-verse-text text-sm font-medium">
-                      <span className="text-gold-500">{batchUrlItems.length}</span> songs to import
+                      <span className="text-gold-500">{batchCards.length}</span> songs to import
                     </p>
                     <button
                       type="button"
-                      onClick={() => { setUrlInput(''); setBatchUrlItems([]); }}
+                      onClick={() => { setUrlInput(''); setBatchCards([]); }}
                       className="text-verse-muted text-xs hover:text-verse-text transition-colors"
                     >
                       Clear all
                     </button>
                   </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {batchUrlItems.map((item, i) => (
-                      <BatchUrlCard
-                        key={item.url + i}
-                        item={item}
+                    {batchCards.map((card, i) => (
+                      <SongCard
+                        key={card.url + i}
+                        data={card}
                         index={i}
-                        onUpdate={(updates) => updateBatchItem(i, updates)}
-                        onRemove={() => removeBatchItem(i)}
+                        showRemove
+                        onUpdate={(updates) => updateBatchCard(i, updates)}
+                        onRemove={() => removeBatchCard(i)}
                       />
                     ))}
                   </div>
@@ -905,71 +926,41 @@ export function YouTubeImportModal({ isOpen, onClose, onImportComplete, organiza
                 </div>
               )}
 
-              {/* ---- Single URL: Time range options ---- */}
+              {/* ---- Single URL: Service extraction (separate section) ---- */}
               {isSingleUrl && (
                 <div className="bg-verse-bg/50 rounded-xl border border-verse-border/50 overflow-hidden">
-                  <button type="button" onClick={() => setTimeExpanded(!timeExpanded)}
+                  <button type="button" onClick={() => setServiceExpanded(!serviceExpanded)}
                     className="w-full flex items-center justify-between px-4 py-3 hover:bg-verse-border/20 transition-colors">
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-verse-muted" />
-                      <span className="text-verse-text text-sm">Time range</span>
+                      <span className="text-verse-text text-sm">Multiple songs from this recording</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-verse-muted text-xs">
-                        {timeMode === 'full' ? 'Full video' : timeMode === 'section' ? `${startTime} → ${endTime}` : `${validSegments.length} song${validSegments.length !== 1 ? 's' : ''}`}
-                      </span>
-                      <ChevronDown className={cn('w-4 h-4 text-verse-muted transition-transform', timeExpanded && 'rotate-180')} />
+                      {serviceExpanded && validSegments.length > 0 && (
+                        <span className="text-gold-500 text-xs font-medium">{validSegments.length} song{validSegments.length !== 1 ? 's' : ''}</span>
+                      )}
+                      <ChevronDown className={cn('w-4 h-4 text-verse-muted transition-transform', serviceExpanded && 'rotate-180')} />
                     </div>
                   </button>
-                  {timeExpanded && (
-                    <div className="px-4 pb-4 space-y-3">
-                      {/* Radio: Full video */}
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input type="radio" name="timeMode" checked={timeMode === 'full'} onChange={() => setTimeMode('full')}
-                          className="w-4 h-4 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500" />
-                        <span className="text-verse-text text-sm">Full video</span>
-                      </label>
-                      {/* Radio: Extract a section */}
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input type="radio" name="timeMode" checked={timeMode === 'section'} onChange={() => setTimeMode('section')}
-                          className="w-4 h-4 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500" />
-                        <span className="text-verse-text text-sm">Extract a section</span>
-                      </label>
-                      {timeMode === 'section' && (
-                        <div className="flex items-center gap-3 ml-7">
-                          <input type="text" value={startTime} onChange={e => setStartTime(e.target.value)} placeholder="0:00"
-                            className="w-20 px-2.5 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
-                          <span className="text-verse-muted text-sm">→</span>
-                          <input type="text" value={endTime} onChange={e => setEndTime(e.target.value)} placeholder="5:00"
-                            className="w-20 px-2.5 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
+                  {serviceExpanded && (
+                    <div className="px-4 pb-4 space-y-2">
+                      <p className="text-verse-muted text-xs">Add timestamps for each song in the recording</p>
+                      {serviceSegments.map((seg, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-verse-muted text-xs w-5 text-right">{i + 1}.</span>
+                          <input type="text" value={seg.title} onChange={e => updateSegment(i, 'title', e.target.value)} placeholder={`Song ${i + 1}`}
+                            className="flex-1 px-2.5 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text placeholder-verse-muted text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
+                          <input type="text" value={seg.start} onChange={e => updateSegment(i, 'start', e.target.value)} placeholder="0:00"
+                            className="w-[72px] px-2 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text placeholder-verse-muted text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
+                          <span className="text-verse-muted text-xs">→</span>
+                          <input type="text" value={seg.end} onChange={e => updateSegment(i, 'end', e.target.value)} placeholder="5:00"
+                            className="w-[72px] px-2 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text placeholder-verse-muted text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
+                          {serviceSegments.length > 1 && (
+                            <button type="button" onClick={() => removeSegment(i)} className="p-1 text-verse-muted hover:text-red-400 rounded hover:bg-verse-border/50"><X className="w-3 h-3" /></button>
+                          )}
                         </div>
-                      )}
-                      {/* Radio: Multiple songs (service) */}
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input type="radio" name="timeMode" checked={timeMode === 'service'} onChange={() => setTimeMode('service')}
-                          className="w-4 h-4 text-gold-500 border-verse-border bg-verse-bg focus:ring-gold-500" />
-                        <span className="text-verse-text text-sm">Multiple songs from this recording</span>
-                      </label>
-                      {timeMode === 'service' && (
-                        <div className="ml-7 space-y-2">
-                          {serviceSegments.map((seg, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <span className="text-verse-muted text-xs w-5 text-right">{i + 1}.</span>
-                              <input type="text" value={seg.title} onChange={e => updateSegment(i, 'title', e.target.value)} placeholder={`Song ${i + 1}`}
-                                className="flex-1 px-2.5 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text placeholder-verse-muted text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
-                              <input type="text" value={seg.start} onChange={e => updateSegment(i, 'start', e.target.value)} placeholder="0:00"
-                                className="w-[72px] px-2 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text placeholder-verse-muted text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
-                              <span className="text-verse-muted text-xs">→</span>
-                              <input type="text" value={seg.end} onChange={e => updateSegment(i, 'end', e.target.value)} placeholder="5:00"
-                                className="w-[72px] px-2 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text placeholder-verse-muted text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-500/50" />
-                              {serviceSegments.length > 1 && (
-                                <button type="button" onClick={() => removeSegment(i)} className="p-1 text-verse-muted hover:text-red-400 rounded hover:bg-verse-border/50"><X className="w-3 h-3" /></button>
-                              )}
-                            </div>
-                          ))}
-                          <button type="button" onClick={addSegment} className="text-gold-500 text-xs hover:text-gold-400 font-medium">+ Add Song</button>
-                        </div>
-                      )}
+                      ))}
+                      <button type="button" onClick={addSegment} className="text-gold-500 text-xs hover:text-gold-400 font-medium">+ Add Song</button>
                     </div>
                   )}
                 </div>

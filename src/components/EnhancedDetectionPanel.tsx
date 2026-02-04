@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Check, X, Music, Library, Star, Loader2, Clock, RefreshCw } from 'lucide-react';
+import { Mic, Check, X, Music, Library, Star, Loader2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { useSessionStore } from '@/stores/session';
@@ -292,7 +292,7 @@ function MatchCard({ match, isInSetlist, isLoaded, isTopMatch, onSelect }: Match
           <div className="flex-1 min-w-0">
             {isLoaded && (
               <p className="text-xs text-green-400 font-medium uppercase tracking-wider mb-1">
-                ✓ Loaded
+                LOADED
               </p>
             )}
             <h4 className="text-lg font-semibold text-verse-text truncate">
@@ -320,17 +320,9 @@ function MatchCard({ match, isInSetlist, isLoaded, isTopMatch, onSelect }: Match
           </div>
         </div>
         
-        {/* Action button */}
-        <div className="mt-4">
-          {isLoaded ? (
-            <button
-              onClick={onSelect}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-verse-elevated border border-verse-border text-verse-muted font-medium rounded-xl hover:bg-verse-border hover:text-verse-text transition-colors text-sm"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Load Different Song
-            </button>
-          ) : (
+        {/* Action button - only show if not loaded */}
+        {!isLoaded && (
+          <div className="mt-4">
             <motion.button
               onClick={onSelect}
               className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-gold-500 to-gold-600 text-verse-bg font-semibold rounded-xl shadow-lg shadow-gold-500/25 hover:shadow-gold-500/40 transition-shadow"
@@ -340,8 +332,8 @@ function MatchCard({ match, isInSetlist, isLoaded, isTopMatch, onSelect }: Match
               <Check className="w-5 h-5" />
               Yes, Load It
             </motion.button>
-          )}
-        </div>
+          </div>
+        )}
       </motion.div>
     );
   }
@@ -566,11 +558,12 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
               exit={{ opacity: 0 }}
               className="space-y-4"
             >
-              {/* Transcribed text - compact */}
+              {/* Transcribed text with typing effect */}
               {transcribedText && (
-                <div className="p-2 bg-verse-bg rounded-lg">
-                  <p className="text-xs text-verse-muted truncate">
-                    Heard: "{transcribedText.slice(0, 60)}..."
+                <div className="p-3 bg-verse-bg rounded-xl border border-verse-border">
+                  <p className="text-xs text-verse-subtle mb-1">Heard:</p>
+                  <p className="text-sm text-verse-text italic">
+                    "<TypingText text={transcribedText.slice(0, 80)} />"
                   </p>
                 </div>
               )}

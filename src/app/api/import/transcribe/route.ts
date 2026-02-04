@@ -130,12 +130,12 @@ export async function POST(request: NextRequest) {
       text: seg.text.trim(),
     }));
 
-    console.log(`[Transcribe] Done: ${result.text?.length} chars, ${segments.length} segments, detected=${result.language}`);
+    console.log(`[Transcribe] Done: ${result.text?.length} chars, ${segments.length} segments`);
 
     return NextResponse.json({
       text: result.text,
-      language: result.language,
-      duration: result.duration,
+      language: "en",
+      duration: 0,
       languages, // Pass all selected languages through for LLM correction
       segments,  // NEW: timestamped segments for editing UI
     });

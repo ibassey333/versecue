@@ -98,11 +98,14 @@ function fmtSize(b: number) { return b < 1048576 ? (b/1024).toFixed(1)+' KB' : (
 
 // Parse URL lines with optional timestamps: "url [start] [end]"
 function parseUrlLines(text: string): { url: string; start?: string; end?: string }[] {
-  return text.split('\n').map(line => {
+  const results: { url: string; start?: string; end?: string }[] = [];
+  for (const line of text.split('\n')) {
     const parts = line.trim().split(/\s+/);
-    if (!parts[0] || !isYtUrl(parts[0])) return null;
-    return { url: parts[0], start: parts[1] || undefined, end: parts[2] || undefined };
-  }).filter((x): x is { url: string; start?: string; end?: string } => x !== null);
+    if (parts[0] && isYtUrl(parts[0])) {
+      results.push({ url: parts[0], start: parts[1], end: parts[2] });
+    }
+  }
+  return results;
 }
 
 function getPlainText(title: string, artist: string, sections: SongSection[]) {
@@ -382,7 +385,7 @@ function YouTubePlayer({
   onSeek?: (time: number) => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [player, setPlayer] = useState<YT.Player | null>(null);
+  const [player, setPlayer] = useState<any>(null);
 
   // Initialize YouTube API
   useEffect(() => {
@@ -399,7 +402,7 @@ function YouTubePlayer({
     // Initialize player when API is ready
     const initPlayer = () => {
       if (!iframeRef.current) return;
-      const newPlayer = new (window as unknown as { YT: typeof YT }).YT.Player(iframeRef.current, {
+      const newPlayer = new (window as any).YT.Player(iframeRef.current, {
         events: {
           onReady: () => setPlayer(newPlayer),
         },

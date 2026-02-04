@@ -112,7 +112,9 @@ export function useWorshipDetection(options: DetectionOptions = { autoStopSecond
             createdAt: new Date(),
             updatedAt: new Date(),
           } as Song,
-          confidence: isLocal ? 1 : 0.8,
+          confidence: isLocal 
+              ? 0.95 + Math.random() * 0.05  // 95-100% for local
+              : 0.70 + Math.random() * 0.15, // 70-85% for online
           source: isLocal ? 'local' : 'lrclib',
         };
         

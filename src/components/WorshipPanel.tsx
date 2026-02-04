@@ -13,6 +13,7 @@ import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { Song, SongMatch } from '@/types';
 import { SongImportModal } from './SongImportModal';
 import { LibraryManager } from './LibraryManager';
+import { EnhancedDetectionPanel } from './EnhancedDetectionPanel';
 import { useOrg } from '@/contexts/OrgContext';
 
 // Helper to split lyrics into sections
@@ -894,6 +895,7 @@ function DetectionPanel({ onSongSelect }: { onSongSelect: (song: Song) => void }
 // Main WorshipPanel Component
 // ============================================
 export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
+  const [detectionMode, setDetectionMode] = useState<'enhanced' | 'classic'>('enhanced');
   const addToSetlist = useSessionStore((s) => s.addToSetlist);
   const setCurrentSong = useSessionStore((s) => s.setCurrentSong);
   const nextSection = useSessionStore((s) => s.nextSection);
@@ -949,7 +951,38 @@ export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
       <div className="col-span-12 lg:col-span-3 space-y-4">
         <SongSearch onSelect={handleSongSelect} />
         <SetlistQueue />
-        <DetectionPanel onSongSelect={handleSongSelect} />
+        {/* Detection Mode Toggle */}
+              <div className="flex items-center justify-center gap-2 mb-4 p-1 bg-verse-bg rounded-lg">
+                <button
+                  onClick={() => setDetectionMode('enhanced')}
+                  className={cn(
+                    'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                    detectionMode === 'enhanced'
+                      ? 'bg-gold-500 text-verse-bg'
+                      : 'text-verse-muted hover:text-verse-text'
+                  )}
+                >
+                  Enhanced
+                </button>
+                <button
+                  onClick={() => setDetectionMode('classic')}
+                  className={cn(
+                    'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                    detectionMode === 'classic'
+                      ? 'bg-verse-border text-verse-text'
+                      : 'text-verse-muted hover:text-verse-text'
+                  )}
+                >
+                  Classic
+                </button>
+              </div>
+              
+              {/* Detection Panel - Mode Based */}
+              {detectionMode === 'enhanced' ? (
+                <EnhancedDetectionPanel onSongSelect={handleSongSelect} />
+              ) : (
+                <DetectionPanel onSongSelect={handleSongSelect} />
+              )}
       </div>
 
       {/* Middle Column - Wider for full lyrics */}

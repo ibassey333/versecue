@@ -68,217 +68,7 @@ function ApiStatus() {
 }
 
 // ============================================
-// Audio Controls
-// ============================================
-function AudioControls({ devices, isSupported, error, audioLevel, speechProvider, className }: {
-  devices: AudioDevice[];
-  isSupported: boolean;
-  error: string | null;
-  audioLevel: number;
-  speechProvider: 'browser' | 'deepgram';
-  className?: string;
-}) {
-  const [showSettings, setShowSettings] = useState(false);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const { 
-    isListening, isPaused, selectedAudioDevice, settings,
-    toggleListening, togglePause, setAudioDevice, newSession, updateSettings 
-  } = useSessionStore();
-  
-  const levelBars = 20;
-  const activeBars = Math.floor(audioLevel * levelBars);
-  
-  return (
-    <div className={cn('rounded-xl border border-verse-border bg-verse-surface p-5', className)}>
-      <div className="flex items-center gap-4 flex-wrap">
-        <button
-          onClick={toggleListening}
-          disabled={!isSupported}
-          className={cn(
-            'flex items-center gap-3 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300',
-            isListening 
-              ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 hover:bg-red-600' 
-              : 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-400 hover:to-green-500 shadow-lg shadow-green-500/20',
-            !isSupported && 'opacity-50 cursor-not-allowed'
-          )}
-        >
-          {isListening ? (
-            <>
-              <MicOff className="w-5 h-5" />
-              <span>Stop Listening</span>
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            </>
-          ) : (
-            <>
-              <Mic className="w-5 h-5" />
-              <span>Start Listening</span>
-            </>
-          )}
-        </button>
-        
-        {isListening && (
-          <>
-            <button 
-              onClick={togglePause} 
-              className={cn(
-                'flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm border transition-all',
-                isPaused 
-                  ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' 
-                  : 'bg-verse-border/50 border-verse-border text-verse-text hover:bg-verse-border'
-              )}
-            >
-              {isPaused ? <><Play className="w-4 h-4" /><span>Resume</span></> : <><Pause className="w-4 h-4" /><span>Pause</span></>}
-            </button>
-            
-            <div className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium',
-              speechProvider === 'deepgram' 
-                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-                : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-            )}>
-              <Zap className="w-3 h-3" />
-              <span>{speechProvider === 'deepgram' ? 'Enhanced' : 'Standard'}</span>
-            </div>
-            
-            {settings.enableGroqDetection && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                <Brain className="w-3 h-3" />
-                <span>AI On</span>
-              </div>
-            )}
-          </>
-        )}
-        
-        <button
-          onClick={newSession}
-          className="flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm border border-verse-border text-verse-muted hover:text-verse-text hover:bg-verse-border/50 transition-all"
-        >
-          <RefreshCw className="w-4 h-4" />
-          <span>New Session</span>
-        </button>
-        
-        
-        {isListening && (
-          <div className="flex items-center gap-3 px-4">
-            <Volume2 className="w-4 h-4 text-verse-muted" />
-            <div className="flex items-end gap-0.5 h-6">
-              {Array.from({ length: levelBars }).map((_, i) => (
-                <div 
-                  key={i} 
-                  className={cn(
-                    'w-1 rounded-full transition-all duration-75',
-                    i < activeBars 
-                      ? (i < levelBars * 0.6 ? 'bg-green-500' : i < levelBars * 0.85 ? 'bg-yellow-500' : 'bg-red-500') 
-                      : 'bg-verse-border'
-                  )} 
-                  style={{ height: `${((i + 1) / levelBars) * 100}%` }} 
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        
-        <button 
-          onClick={() => setShowSettings(!showSettings)} 
-          className={cn(
-            'p-3 rounded-xl transition-colors text-verse-muted hover:text-verse-text',
-            showSettings && 'bg-verse-border text-verse-text'
-          )}
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-      </div>
-      
-      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-      
-      {showSettings && (
-        <div className="mt-4 pt-4 border-t border-verse-border space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <label className="block">
-              <span className="text-xs font-medium text-verse-subtle uppercase tracking-wide">Audio Input</span>
-              <select 
-                value={selectedAudioDevice || ''} 
-                onChange={(e) => setAudioDevice(e.target.value)} 
-                className="mt-2 w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50"
-              >
-                {devices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
-                ))}
-              </select>
-            </label>
-            
-            <label className="block">
-              <span className="text-xs font-medium text-verse-subtle uppercase tracking-wide">Speech Recognition</span>
-              <select 
-                value={settings.speechProvider} 
-                onChange={(e) => updateSettings({ speechProvider: e.target.value as 'browser' | 'deepgram' })} 
-                className="mt-2 w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50"
-              >
-                <option value="browser">Browser (Free)</option>
-                <option value="deepgram">Enhanced (Best Accuracy)</option>
-              </select>
-            </label>
-            
-            <label className="block">
-              <span className="text-xs font-medium text-verse-subtle uppercase tracking-wide">Default Translation</span>
-              <select 
-                value={settings.translation} 
-                onChange={(e) => updateSettings({ translation: e.target.value })} 
-                className="mt-2 w-full px-4 py-3 rounded-xl bg-verse-bg border border-verse-border text-verse-text text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50"
-              >
-                {getEnabledTranslations().map((t) => (
-                  <option key={t.id} value={t.id}>{t.name} {t.source === 'local' ? '(Offline)' : ''}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          
-          <div className="flex flex-wrap gap-6">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={settings.autoApproveHighConfidence}
-                onChange={(e) => updateSettings({ autoApproveHighConfidence: e.target.checked })}
-                className="w-4 h-4 rounded border-verse-border text-gold-500 focus:ring-gold-500"
-              />
-              <span className="text-sm text-verse-text">Auto-approve high confidence</span>
-            </label>
-            
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={settings.keyboardShortcutsEnabled}
-                onChange={(e) => updateSettings({ keyboardShortcutsEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-verse-border text-gold-500 focus:ring-gold-500"
-              />
-              <span className="text-sm text-verse-text">Keyboard shortcuts</span>
-            </label>
-            
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={settings.enableGroqDetection || false}
-                onChange={(e) => updateSettings({ enableGroqDetection: e.target.checked })}
-                className="w-4 h-4 rounded border-verse-border text-purple-500 focus:ring-purple-500"
-              />
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-verse-text">AI Detection (Groq)</span>
-                {settings.enableGroqDetection && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">Uses credits</span>
-                )}
-              </div>
-            </label>
-          </div>
-          
-          <ApiStatus />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================
-// Transcript Panel
+// Transcript Panel - With Audio Controls in Header
 // ============================================
 function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvider: 'browser' | 'deepgram'; className?: string; orgSlug?: string }) {
   const interimTranscript = useSessionStore((s) => s.interimTranscript);
@@ -286,6 +76,9 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
   const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);
+  const toggleListening = useSessionStore((s) => s.toggleListening);
+  const togglePause = useSessionStore((s) => s.togglePause);
+  const newSession = useSessionStore((s) => s.newSession);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Auto-scroll to latest text
@@ -297,7 +90,8 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
   
   return (
     <div className={cn('flex flex-col rounded-xl border border-verse-border bg-verse-surface', className)}>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
+      {/* Header with audio controls */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-verse-border">
         <div className="flex items-center gap-3">
           <div className={cn(
             'w-2.5 h-2.5 rounded-full',
@@ -307,16 +101,66 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
             Live Transcript
           </h3>
         </div>
-        {isListening && (
-          <span className={cn(
-            'text-[10px] px-2 py-1 rounded-full font-medium',
-            speechProvider === 'deepgram' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
-          )}>
-            {speechProvider === 'deepgram' ? '🎯 Enhanced' : '🌐 Standard'}
-          </span>
-        )}
+        
+        <div className="flex items-center gap-2">
+          {/* Start/Pause/Resume Button */}
+          {!isListening ? (
+            <button
+              onClick={toggleListening}
+              className="flex items-center gap-2 px-4 py-2 bg-gold-500 text-verse-bg font-semibold text-sm rounded-xl hover:bg-gold-400 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-gold-500/20"
+            >
+              <Mic className="w-4 h-4" />
+              <span className="hidden sm:inline">Start Listening</span>
+              <span className="sm:hidden">Start</span>
+            </button>
+          ) : (
+            <button
+              onClick={togglePause}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 font-semibold text-sm rounded-xl transition-all',
+                isPaused
+                  ? 'bg-gold-500 text-verse-bg hover:bg-gold-400'
+                  : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20'
+              )}
+            >
+              {isPaused ? (
+                <>
+                  <Mic className="w-4 h-4" />
+                  <span>Resume</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-4 h-4 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  </div>
+                  <span>Listening</span>
+                </>
+              )}
+            </button>
+          )}
+          
+          {/* New Session */}
+          <button
+            onClick={newSession}
+            className="p-2 text-verse-muted hover:text-verse-text rounded-lg hover:bg-verse-border transition-colors"
+            title="New Session"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          
+          {/* Speech Provider Badge */}
+          {isListening && (
+            <span className={cn(
+              'text-[10px] px-2 py-1 rounded-full font-medium hidden sm:inline-block',
+              speechProvider === 'deepgram' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+            )}>
+              {speechProvider === 'deepgram' ? '🎯 Enhanced' : '🌐 Standard'}
+            </span>
+          )}
+        </div>
       </div>
       
+      {/* Transcript Content */}
       <div className="flex-1 overflow-y-auto p-5 min-h-[200px] max-h-[350px]">
         {transcript.length === 0 && !interimTranscript ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
@@ -338,6 +182,7 @@ function TranscriptPanel({ speechProvider, className, orgSlug }: { speechProvide
         )}
       </div>
       
+      {/* Footer */}
       <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50 rounded-b-xl">
         <span className="text-xs text-verse-subtle">{transcript.length} segments</span>
       </div>
@@ -601,171 +446,139 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
     verseStyles.WebkitTextStroke = `${settings.text_outline_width * scale}px ${settings.text_outline_color}`;
   }
   
+  const referenceStyles: React.CSSProperties = {
+    fontFamily,
+    fontSize: settings.reference_font_size * scale,
+    color: settings.reference_color,
+    textAlign: settings.text_align as any,
+  };
+  
+  const translationStyles: React.CSSProperties = {
+    fontSize: 10 * scale * 3,
+    color: settings.translation_color,
+  };
+  
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-verse-border">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-verse-border">
         <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Live Preview</h3>
-        <a href={orgSlug ? `/display/${orgSlug}` : "/display"} target="_blank" className="text-xs text-verse-subtle hover:text-verse-text transition-colors">Open Display ↗</a>
+        {orgSlug && (
+          <Link 
+            href={`/${orgSlug}/display`} 
+            target="_blank"
+            className="text-xs text-verse-muted hover:text-gold-400 transition-colors flex items-center gap-1"
+          >
+            Open Display <span className="text-[10px]">↗</span>
+          </Link>
+        )}
       </div>
       
-      {/* WYSIWYG Preview Container */}
       <div 
-        className="relative aspect-video overflow-hidden"
+        className={cn('relative aspect-video flex flex-col items-center p-4', verticalAlign)}
         style={{
           backgroundColor: settings.background_color,
           backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
+          padding: settings.padding * scale,
         }}
       >
         {currentDisplay ? (
-          <div 
-            className={cn("absolute inset-0 flex flex-col items-center text-center", verticalAlign)}
-            style={{ padding: settings.padding * scale }}
-          >
-            {/* Reference - Top */}
+          <>
             {settings.reference_position === 'top' && (
-              <h2 
-                className="font-bold mb-1"
-                style={{ 
-                  fontSize: settings.reference_font_size * scale,
-                  color: settings.reference_color,
-                  textAlign: settings.text_align as any,
-                }}
-              >
+              <div style={referenceStyles} className="mb-2">
                 {currentDisplay.reference.reference}
-              </h2>
-            )}
-            
-            {/* Part indicator for operator */}
-            {totalParts > 1 && (
-              <div className="flex items-center gap-1 mb-1 bg-black/50 rounded-lg px-2 py-1">
-                <button 
-                  onClick={goToPrevPart} 
-                  disabled={currentPart <= 1}
-                  className={cn(
-                    "p-0.5 rounded transition-colors",
-                    currentPart <= 1 
-                      ? "text-white/20 cursor-not-allowed" 
-                      : "text-gold-400 hover:text-gold-300"
-                  )}
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                </button>
-                <span 
-                  className="text-[8px] font-medium px-1.5 py-0.5 rounded"
-                  style={{ backgroundColor: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24' }}
-                >
-                  Part {currentPart}/{totalParts}
-                </span>
-                <button 
-                  onClick={goToNextPart} 
-                  disabled={currentPart >= totalParts}
-                  className={cn(
-                    "p-0.5 rounded transition-colors",
-                    currentPart >= totalParts 
-                      ? "text-white/20 cursor-not-allowed" 
-                      : "text-gold-400 hover:text-gold-300"
-                  )}
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </button>
+                {settings.show_translation && (
+                  <span style={translationStyles} className="ml-2">— {currentDisplay.translation || 'KJV'} —</span>
+                )}
               </div>
             )}
             
-            {/* Verse Text */}
-            {displayText && (
-              <p className="leading-relaxed" style={verseStyles}>
-                "{displayText}"
-              </p>
-            )}
+            <p style={verseStyles} className="leading-relaxed">
+              "{displayText}"
+            </p>
             
-            {/* Reference - Bottom */}
             {settings.reference_position === 'bottom' && (
-              <h2 
-                className="font-bold mt-1"
-                style={{ 
-                  fontSize: settings.reference_font_size * scale,
-                  color: settings.reference_color,
-                  textAlign: settings.text_align as any,
-                }}
-              >
+              <div style={referenceStyles} className="mt-2">
                 {currentDisplay.reference.reference}
-              </h2>
+                {settings.show_translation && (
+                  <span style={translationStyles} className="ml-2">— {currentDisplay.translation || 'KJV'} —</span>
+                )}
+              </div>
             )}
             
-            {/* Translation */}
-            {settings.show_translation && currentDisplay.translation && (
-              <span 
-                className="mt-1 uppercase tracking-wider"
-                style={{ 
-                  fontSize: 8,
-                  color: settings.translation_color,
-                }}
-              >
-                — {currentDisplay.translation} —
-              </span>
+            {/* Part indicator */}
+            {totalParts > 1 && (
+              <div className="absolute bottom-2 right-2 text-[9px] text-white/50 bg-black/30 px-1.5 py-0.5 rounded">
+                {currentPart}/{totalParts}
+              </div>
             )}
-            
-            {/* Verse Navigation */}
-            <div className="flex items-center gap-2 mt-2 bg-black/50 rounded-lg px-2 py-1">
-              <button 
-                onClick={() => goToPrevVerse(splitThreshold)} 
-                className="p-1 rounded text-white/70 hover:text-white transition-colors" 
-                title="Previous verse"
-              >
-                <ChevronLeft className="w-3 h-3" />
-              </button>
-              <span className="text-[8px] text-white/50">Verse</span>
-              <button 
-                onClick={() => goToNextVerse(splitThreshold)} 
-                className="p-1 rounded text-white/70 hover:text-white transition-colors" 
-                title="Next verse"
-              >
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
-            
-            {/* Clear button */}
-            <button 
-              onClick={clearDisplay} 
-              className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/70 hover:text-white transition-colors"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
+          </>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div className="text-2xl mb-1 opacity-30">📺</div>
-            <p className="text-white/50 text-[10px]">No scripture displayed</p>
+          <div className="flex flex-col items-center justify-center text-center opacity-50">
+            <div className="text-2xl mb-2">📖</div>
+            <p className="text-xs text-gray-400">No scripture displayed</p>
           </div>
         )}
       </div>
+      
+      {currentDisplay && (
+        <div className="flex items-center justify-between px-3 py-2 bg-verse-bg border-t border-verse-border">
+          <div className="flex items-center gap-1">
+            <button onClick={() => goToPrevVerse(splitThreshold)} className="p-1.5 text-verse-muted hover:text-verse-text rounded transition-colors" title="Previous verse">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button onClick={() => goToNextVerse(splitThreshold)} className="p-1.5 text-verse-muted hover:text-verse-text rounded transition-colors" title="Next verse">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            
+            {totalParts > 1 && (
+              <>
+                <div className="w-px h-4 bg-verse-border mx-1" />
+                <button 
+                  onClick={goToPrevPart} 
+                  disabled={currentPart <= 1}
+                  className="px-2 py-1 text-[10px] text-verse-muted hover:text-verse-text disabled:opacity-30 transition-colors"
+                >
+                  ◀ Prev
+                </button>
+                <span className="text-[10px] text-verse-muted">{currentPart}/{totalParts}</span>
+                <button 
+                  onClick={goToNextPart}
+                  disabled={currentPart >= totalParts}
+                  className="px-2 py-1 text-[10px] text-verse-muted hover:text-verse-text disabled:opacity-30 transition-colors"
+                >
+                  Next ▶
+                </button>
+              </>
+            )}
+          </div>
+          
+          <button onClick={clearDisplay} className="p-1.5 text-verse-muted hover:text-red-500 rounded transition-colors" title="Clear display">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============================================
-// Translation Selector
+// Translation Selector - Dropdown Version
 // ============================================
 function TranslationSelector({ className }: { className?: string }) {
   const settings = useSessionStore((s) => s.settings);
-  const toggleListening = useSessionStore((s) => s.toggleListening);
-  const togglePause = useSessionStore((s) => s.togglePause);
-  const newSession = useSessionStore((s) => s.newSession);
-  const updateSettings = useSessionStore((s) => s.updateSettings);
-  const setAudioDevice = useSessionStore((s) => s.setAudioDevice);
-  const selectedAudioDevice = useSessionStore((s) => s.selectedAudioDevice);
   const setTranslation = useSessionStore((s) => s.setTranslation);
   const changeDisplayTranslation = useSessionStore((s) => s.changeDisplayTranslation);
   const currentDisplay = useSessionStore((s) => s.currentDisplay);
   const [loading, setLoading] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
   
   const translations = getEnabledTranslations();
-  const quickTranslations = translations.slice(0, 3);
   
   const handleChange = async (newTranslation: string) => {
     setTranslation(newTranslation);
+    setIsOpen(false);
     if (currentDisplay) {
       setLoading(newTranslation);
       await changeDisplayTranslation(newTranslation);
@@ -773,25 +586,54 @@ function TranslationSelector({ className }: { className?: string }) {
     }
   };
   
+  const currentTranslation = translations.find(t => t.id === settings.translation);
+  
   return (
-    <div className={cn('flex items-center gap-2', className)}>
-      <span className="text-xs text-verse-subtle">Translation:</span>
-      {quickTranslations.map((t) => (
+    <div className={cn('relative', className)}>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-verse-subtle">Translation:</span>
         <button
-          key={t.id}
-          onClick={() => handleChange(t.id)}
-          disabled={loading === t.id}
-          className={cn(
-            'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-            settings.translation === t.id
-              ? 'bg-gold-500 text-verse-bg'
-              : 'bg-verse-border text-verse-muted hover:text-verse-text hover:bg-verse-elevated',
-            loading === t.id && 'opacity-50'
-          )}
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-1.5 bg-verse-border text-verse-text rounded-lg text-sm font-medium hover:bg-verse-elevated transition-colors"
         >
-          {loading === t.id ? '...' : t.abbreviation}
+          <span>{loading ? '...' : currentTranslation?.abbreviation || settings.translation}</span>
+          <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', isOpen && 'rotate-180')} />
         </button>
-      ))}
+      </div>
+      
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setIsOpen(false)} 
+          />
+          
+          {/* Dropdown */}
+          <div className="absolute top-full left-0 mt-2 w-48 bg-verse-surface border border-verse-border rounded-xl shadow-xl overflow-hidden z-50">
+            {translations.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => handleChange(t.id)}
+                disabled={loading === t.id}
+                className={cn(
+                  'w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors text-left',
+                  settings.translation === t.id
+                    ? 'bg-gold-500/10 text-gold-400'
+                    : 'text-verse-text hover:bg-verse-border',
+                  loading === t.id && 'opacity-50'
+                )}
+              >
+                <div>
+                  <span className="font-medium">{t.abbreviation}</span>
+                  <span className="text-verse-muted ml-2 text-xs">{t.name}</span>
+                </div>
+                {settings.translation === t.id && <Check className="w-4 h-4 text-gold-500" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1119,17 +961,8 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   
   return (
     <div className="min-h-screen bg-verse-bg">
-      {/* Controls Bar */}
+      {/* Controls Bar - Simplified */}
       <ControlsBar
-        isListening={isListening}
-        isPaused={isPaused}
-        onStartListening={toggleListening}
-        onStopListening={toggleListening}
-        onTogglePause={togglePause}
-        onNewSession={newSession}
-        translation={settings.translation}
-        onTranslationChange={(t: string) => updateSettings({ translation: t })}
-        availableTranslations={getEnabledTranslations().map(t => t.id)}
         onOpenSettings={() => setShowSettings(true)}
         showSaveNotes={transcript.length > 0}
         onSaveNotes={() => setShowEndSession(true)}

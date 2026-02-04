@@ -1,20 +1,11 @@
 "use client";
 
 import { useRef, useState } from 'react';
-import { Mic, MicOff, RotateCcw, Settings, HelpCircle, ChevronDown, BookOpen, Music } from 'lucide-react';
+import { Settings, HelpCircle, BookOpen, Music } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HelpPopover } from './HelpPopover';
 
 interface ControlsBarProps {
-  isListening: boolean;
-  isPaused: boolean;
-  onStartListening: () => void;
-  onStopListening: () => void;
-  onTogglePause: () => void;
-  onNewSession: () => void;
-  translation: string;
-  onTranslationChange: (translation: string) => void;
-  availableTranslations: string[];
   onOpenSettings: () => void;
   showSaveNotes?: boolean;
   onSaveNotes?: () => void;
@@ -24,15 +15,6 @@ interface ControlsBarProps {
 }
 
 export function ControlsBar({
-  isListening,
-  isPaused,
-  onStartListening,
-  onStopListening,
-  onTogglePause,
-  onNewSession,
-  translation,
-  onTranslationChange,
-  availableTranslations,
   onOpenSettings,
   showSaveNotes,
   onSaveNotes,
@@ -40,75 +22,17 @@ export function ControlsBar({
   onModeChange,
 }: ControlsBarProps) {
   const [showHelp, setShowHelp] = useState(false);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
   
   // Default to sermon mode if not provided
   const currentMode = mode || 'sermon';
-  const [showTranslations, setShowTranslations] = useState(false);
-  const helpButtonRef = useRef<HTMLButtonElement>(null);
-  const translationRef = useRef<HTMLDivElement>(null);
-
-  const handleTranslationBlur = () => {
-    setTimeout(() => setShowTranslations(false), 150);
-  };
 
   return (
     <div className="sticky top-16 z-40 border-b border-verse-border bg-verse-bg">
       <div className="max-w-[1800px] mx-auto px-4 sm:px-6 py-3">
         <div className="flex items-center justify-between gap-4">
+          {/* Left side - Mode Toggle */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {currentMode !== "worship" && (<>{!isListening ? (
-              <button
-                onClick={onStartListening}
-                className="flex items-center gap-2 px-4 sm:px-5 py-2.5 bg-gold-500 text-verse-bg font-semibold rounded-xl hover:bg-gold-400 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-gold-500/20"
-              >
-                <Mic className="w-4 h-4" />
-                <span className="hidden sm:inline">Start Listening</span>
-                <span className="sm:hidden">Start</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={onTogglePause}
-                  className={cn(
-                    'flex items-center gap-2 px-4 sm:px-5 py-2.5 font-semibold rounded-xl transition-all',
-                    isPaused
-                      ? 'bg-gold-500 text-verse-bg hover:bg-gold-400'
-                      : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20'
-                  )}
-                >
-                  {isPaused ? (
-                    <>
-                      <Mic className="w-4 h-4" />
-                      <span className="hidden sm:inline">Resume</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-4 h-4 flex items-center justify-center">
-                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                      </div>
-                      <span className="hidden sm:inline">Listening</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={onStopListening}
-                  className="p-2.5 text-verse-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
-                  title="Stop"
-                >
-                  <MicOff className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            <button
-              onClick={onNewSession}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 text-verse-muted hover:text-verse-text border border-verse-border rounded-xl hover:bg-verse-surface transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">New Session</span>
-            </button></>)}
-            
-            {/* Mode Toggle */}
             {onModeChange && (
               <div className="flex items-center bg-verse-surface border border-verse-border rounded-xl p-1">
                 <button
@@ -139,6 +63,7 @@ export function ControlsBar({
             )}
           </div>
 
+          {/* Right side - Save Notes, Settings, Help */}
           <div className="flex items-center gap-2">
             {/* Save Notes */}
             {showSaveNotes && onSaveNotes && (
@@ -150,40 +75,6 @@ export function ControlsBar({
                 <span className="hidden sm:inline">Save Notes</span>
               </button>
             )}
-            
-            {currentMode !== "worship" && (<div className="relative" ref={translationRef}>
-              <button
-                onClick={() => setShowTranslations(!showTranslations)}
-                onBlur={handleTranslationBlur}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-verse-text bg-verse-surface border border-verse-border rounded-lg hover:border-verse-muted transition-colors"
-              >
-                <span>{translation}</span>
-                <ChevronDown className={cn('w-3.5 h-3.5 text-verse-muted transition-transform', showTranslations && 'rotate-180')} />
-              </button>
-              
-              {showTranslations && (
-                <div className="absolute top-full right-0 mt-1 w-40 bg-verse-surface border border-verse-border rounded-xl shadow-xl overflow-hidden z-50">
-                  {availableTranslations.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => {
-                        onTranslationChange(t);
-                        setShowTranslations(false);
-                      }}
-                      className={cn(
-                        'w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors',
-                        translation === t
-                          ? 'bg-gold-500/10 text-gold-400'
-                          : 'text-verse-text hover:bg-verse-border'
-                      )}
-                    >
-                      {t}
-                      {translation === t && <span className="text-gold-500">✓</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>)}
 
             <div className="w-px h-6 bg-verse-border hidden sm:block" />
 

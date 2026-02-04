@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Check, X, Music, Library, Star, Loader2, Clock } from 'lucide-react';
+import { Mic, Check, X, Music, Library, Star, Loader2, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { useSessionStore } from '@/stores/session';
@@ -398,6 +398,8 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
   const [autoStopSeconds, setAutoStopSeconds] = useState(15);
   const [showTimeSelector, setShowTimeSelector] = useState(false);
   const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
+  const [heardCollapsed, setHeardCollapsed] = useState(false);
+  const [matchesCollapsed, setMatchesCollapsed] = useState(false);
   
   const {
     status,
@@ -436,6 +438,8 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
   const handleDetectAnother = useCallback(() => {
     reset();
     setLoadedSongId(null);
+    setHeardCollapsed(false);
+    setMatchesCollapsed(false);
   }, [reset]);
 
   const getCurrentTimeLabel = () => {
@@ -558,13 +562,35 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
               exit={{ opacity: 0 }}
               className="space-y-4"
             >
-              {/* Transcribed text with typing effect */}
+              {/* Transcribed text - collapsible */}
               {transcribedText && (
-                <div className="p-3 bg-verse-bg rounded-xl border border-verse-border">
-                  <p className="text-xs text-verse-subtle mb-1">Heard:</p>
-                  <p className="text-sm text-verse-text italic">
-                    "<TypingText text={transcribedText.slice(0, 80)} />"
-                  </p>
+                <div className="bg-verse-bg rounded-xl border border-verse-border overflow-hidden">
+                  <button
+                    onClick={() => setHeardCollapsed(!heardCollapsed)}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-verse-elevated/50 transition-colors"
+                  >
+                    <span className="text-xs text-verse-subtle uppercase tracking-wider">Heard</span>
+                    {heardCollapsed ? (
+                      <ChevronDown className="w-4 h-4 text-verse-muted" />
+                    ) : (
+                      <ChevronUp className="w-4 h-4 text-verse-muted" />
+                    )}
+                  </button>
+                  <AnimatePresence>
+                    {!heardCollapsed && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <p className="px-3 pb-3 text-sm text-verse-text italic">
+                          "<TypingText text={transcribedText.slice(0, 80)} />"
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
               
@@ -579,22 +605,46 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
                 />
               )}
               
-              {/* Other Matches */}
+              {/* Other Matches - collapsible */}
               {otherMatches.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs text-verse-subtle uppercase tracking-wider px-1">
-                    Other Matches
-                  </p>
-                  {otherMatches.map((match) => (
-                    <MatchCard
-                      key={match.song.id}
-                      match={match}
-                      isInSetlist={isInSetlist(match.song.title)}
-                      isLoaded={match.song.id === loadedSongId}
-                      isTopMatch={false}
-                      onSelect={() => handleSelectSong(match)}
-                    />
-                  ))}
+                <div className="bg-verse-bg rounded-xl border border-verse-border overflow-hidden">
+                  <button
+                    onClick={() => setMatchesCollapsed(!matchesCollapsed)}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-verse-elevated/50 transition-colors"
+                  >
+                    <span className="text-xs text-verse-subtle uppercase tracking-wider">
+                      Other Matches ({otherMatches.length})
+                    </span>
+                    {matchesCollapsed ? (
+                      <ChevronDown className="w-4 h-4 text-verse-muted" />
+                    ) : (
+                      <ChevronUp className="w-4 h-4 text-verse-muted" />
+                    )}
+                  </button>
+                  <AnimatePresence>
+                    {!matchesCollapsed && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-3 pb-3 space-y-2">
+                          {otherMatches.map((match) => (
+                            <MatchCard
+                              key={match.song.id}
+                              match={match}
+                              isInSetlist={isInSetlist(match.song.title)}
+                              isLoaded={match.song.id === loadedSongId}
+                              isTopMatch={false}
+                              onSelect={() => handleSelectSong(match)}
+                            />
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
               

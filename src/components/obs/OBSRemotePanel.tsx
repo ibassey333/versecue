@@ -307,12 +307,23 @@ export function OBSRemotePanel({ className, defaultExpanded = true }: OBSRemoteP
               {state.status === 'error' && (
                 <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                   <p className="text-xs text-red-400">{state.error || 'Connection failed'}</p>
-                  <button
-                    onClick={() => connect()}
-                    className="mt-2 text-xs text-red-400 underline hover:text-red-300"
-                  >
-                    Retry connection
-                  </button>
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      onClick={() => connect()}
+                      className="text-xs text-red-400 underline hover:text-red-300"
+                    >
+                      Retry connection
+                    </button>
+                    <button
+                      onClick={() => {
+                        disconnect();
+                        updateSettings({ enabled: false });
+                      }}
+                      className="text-xs text-verse-muted underline hover:text-verse-text"
+                    >
+                      Change settings
+                    </button>
+                  </div>
                 </div>
               )}
 

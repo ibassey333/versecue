@@ -31,21 +31,73 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
   const [state, setState] = useState<OBSState>(DEFAULT_OBS_STATE);
   const screenshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Track current scenes for screenshot fetching
+  const currentProgramSceneRef = useRef<string | null>(null);
+  const currentPreviewSceneRef = useRef<string | null>(null);
 
   // Update state helper
   const updateState = useCallback((updates: Partial<OBSState>) => {
     setState(prev => {
       const newState = { ...prev, ...updates };
       onStateChange?.(newState);
+      
+      // Keep refs in sync for screenshot interval
+      if (updates.currentProgramScene !== undefined) {
+        currentProgramSceneRef.current = updates.currentProgramScene;
+      }
+      if (updates.currentPreviewScene !== undefined) {
+        currentPreviewSceneRef.current = updates.currentPreviewScene;
+      }
+      
       return newState;
     });
   }, [onStateChange]);
+
+  // Fetch both program and preview screenshots
+  const fetchAllScreenshots = useCallback(async () => {
+    if (!obsRef.current) return;
+    
+    try {
+      // Fetch program screenshot
+      if (currentProgramSceneRef.current) {
+        const programScreenshot = await obsRef.current.call('GetSourceScreenshot', {
+          sourceName: currentProgramSceneRef.current,
+          imageFormat: 'jpg',
+          imageWidth: 320,
+          imageHeight: 180,
+          imageCompressionQuality: 50,
+        });
+        updateState({ programScreenshot: programScreenshot.imageData });
+      }
+      
+      // Fetch preview screenshot if in studio mode and we have a preview scene
+      if (currentPreviewSceneRef.current) {
+        const previewScreenshot = await obsRef.current.call('GetSourceScreenshot', {
+          sourceName: currentPreviewSceneRef.current,
+          imageFormat: 'jpg',
+          imageWidth: 320,
+          imageHeight: 180,
+          imageCompressionQuality: 50,
+        });
+        updateState({ previewScreenshot: previewScreenshot.imageData });
+      }
+    } catch {
+      // Ignore screenshot errors
+    }
+  }, [updateState]);
 
   // Connect to OBS
   const connect = useCallback(async () => {
     if (!settings.enabled) return;
     if (obsRef.current) {
       try { obsRef.current.disconnect(); } catch {}
+    }
+
+    // Clear any existing interval
+    if (screenshotIntervalRef.current) {
+      clearInterval(screenshotIntervalRef.current);
+      screenshotIntervalRef.current = null;
     }
 
     updateState({ status: 'connecting', error: null });
@@ -69,11 +121,25 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
         sceneIndex: i,
       }));
 
+      // Store current scene in ref
+      currentProgramSceneRef.current = currentScene.currentProgramSceneName;
+
+      // Try to get current preview scene (only works if studio mode is enabled in OBS)
+      let previewSceneName: string | null = null;
+      try {
+        const previewScene = await obs.call('GetCurrentPreviewScene');
+        previewSceneName = previewScene.currentPreviewSceneName;
+        currentPreviewSceneRef.current = previewSceneName;
+      } catch {
+        // Studio mode not enabled in OBS, ignore
+      }
+
       updateState({
         status: 'connected',
         error: null,
         scenes,
         currentProgramScene: currentScene.currentProgramSceneName,
+        currentPreviewScene: previewSceneName,
         transitions: (transitionList.transitions as any[]).map(t => ({
           transitionName: t.transitionName,
           transitionKind: t.transitionKind,
@@ -84,11 +150,17 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
 
       // Set up event listeners
       obs.on('CurrentProgramSceneChanged', (data) => {
+        currentProgramSceneRef.current = data.sceneName;
         updateState({ currentProgramScene: data.sceneName });
+        // Fetch new screenshot immediately on scene change
+        fetchAllScreenshots();
       });
 
       obs.on('CurrentPreviewSceneChanged', (data) => {
+        currentPreviewSceneRef.current = data.sceneName;
         updateState({ currentPreviewScene: data.sceneName });
+        // Fetch new preview screenshot immediately
+        fetchAllScreenshots();
       });
 
       obs.on('SceneListChanged', async () => {
@@ -101,6 +173,10 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
       });
 
       obs.on('ConnectionClosed', () => {
+        if (screenshotIntervalRef.current) {
+          clearInterval(screenshotIntervalRef.current);
+          screenshotIntervalRef.current = null;
+        }
         updateState({ 
           status: 'disconnected', 
           programScreenshot: null,
@@ -119,23 +195,12 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
         });
       });
 
-      // Start screenshot interval if enabled
-      if (settings.screenshotInterval > 0) {
-        screenshotIntervalRef.current = setInterval(async () => {
-          try {
-            const screenshot = await obs.call('GetSourceScreenshot', {
-              sourceName: currentScene.currentProgramSceneName,
-              imageFormat: 'jpg',
-              imageWidth: 320,
-              imageHeight: 180,
-              imageCompressionQuality: 50,
-            });
-            updateState({ programScreenshot: screenshot.imageData });
-          } catch {
-            // Ignore screenshot errors
-          }
-        }, settings.screenshotInterval);
-      }
+      // Fetch initial screenshot
+      await fetchAllScreenshots();
+
+      // Start screenshot interval if enabled (use 2 seconds as default if not set)
+      const interval = settings.screenshotInterval > 0 ? settings.screenshotInterval : 2000;
+      screenshotIntervalRef.current = setInterval(fetchAllScreenshots, interval);
 
     } catch (err: any) {
       console.error('[OBS] Connection error:', err);
@@ -144,7 +209,7 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
         error: err.message || 'Failed to connect to OBS',
       });
     }
-  }, [settings, updateState]);
+  }, [settings, updateState, fetchAllScreenshots]);
 
   // Disconnect
   const disconnect = useCallback(() => {
@@ -160,6 +225,8 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
       try { obsRef.current.disconnect(); } catch {}
       obsRef.current = null;
     }
+    currentProgramSceneRef.current = null;
+    currentPreviewSceneRef.current = null;
     updateState(DEFAULT_OBS_STATE);
   }, [updateState]);
 
@@ -181,23 +248,22 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
     
     try {
       await obsRef.current.call('SetCurrentPreviewScene', { sceneName });
+      currentPreviewSceneRef.current = sceneName;
       updateState({ currentPreviewScene: sceneName });
       
       // Fetch preview screenshot
-      if (settings.screenshotInterval > 0) {
-        const screenshot = await obsRef.current.call('GetSourceScreenshot', {
-          sourceName: sceneName,
-          imageFormat: 'jpg',
-          imageWidth: 320,
-          imageHeight: 180,
-          imageCompressionQuality: 50,
-        });
-        updateState({ previewScreenshot: screenshot.imageData });
-      }
+      const screenshot = await obsRef.current.call('GetSourceScreenshot', {
+        sourceName: sceneName,
+        imageFormat: 'jpg',
+        imageWidth: 320,
+        imageHeight: 180,
+        imageCompressionQuality: 50,
+      });
+      updateState({ previewScreenshot: screenshot.imageData });
     } catch (err: any) {
       console.error('[OBS] Failed to set preview:', err);
     }
-  }, [state.status, settings.screenshotInterval, updateState]);
+  }, [state.status, updateState]);
 
   // Transition preview to program (Studio mode)
   const transitionToProgram = useCallback(async () => {
@@ -234,24 +300,13 @@ export function useOBS({ settings, onStateChange }: UseOBSOptions): UseOBSReturn
 
   // Fetch screenshot on demand
   const fetchScreenshot = useCallback(async (): Promise<string | null> => {
-    if (!obsRef.current || state.status !== 'connected' || !state.currentProgramScene) {
+    if (!obsRef.current || state.status !== 'connected') {
       return null;
     }
     
-    try {
-      const screenshot = await obsRef.current.call('GetSourceScreenshot', {
-        sourceName: state.currentProgramScene,
-        imageFormat: 'jpg',
-        imageWidth: 320,
-        imageHeight: 180,
-        imageCompressionQuality: 50,
-      });
-      updateState({ programScreenshot: screenshot.imageData });
-      return screenshot.imageData;
-    } catch {
-      return null;
-    }
-  }, [state.status, state.currentProgramScene, updateState]);
+    await fetchAllScreenshots();
+    return state.programScreenshot;
+  }, [state.status, state.programScreenshot, fetchAllScreenshots]);
 
   // Refresh scenes list
   const refreshScenes = useCallback(async () => {

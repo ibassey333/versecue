@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Check, X, Music, Library, Star, Loader2, Clock } from 'lucide-react';
+import { Mic, Check, X, Music, Library, Star, Loader2, Clock, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorshipDetection } from '@/hooks/useWorshipDetection';
 import { useSessionStore } from '@/stores/session';
@@ -37,13 +37,7 @@ function TimeSelector({
   
   return (
     <>
-      {/* Invisible backdrop to catch clicks */}
-      <div 
-        className="fixed inset-0 z-40" 
-        onClick={onClose}
-      />
-      
-      {/* Popover */}
+      <div className="fixed inset-0 z-40" onClick={onClose} />
       <motion.div
         initial={{ opacity: 0, y: -8, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -82,7 +76,6 @@ function TimeSelector({
 function RecordingAnimation({ isRecording }: { isRecording: boolean }) {
   return (
     <div className="relative w-32 h-32 flex items-center justify-center">
-      {/* Outer glow */}
       <motion.div
         className="absolute inset-0 rounded-full bg-gold-500/20"
         animate={isRecording ? {
@@ -92,7 +85,6 @@ function RecordingAnimation({ isRecording }: { isRecording: boolean }) {
         transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
       />
       
-      {/* Ring 3 (outermost) */}
       <motion.div
         className="absolute w-28 h-28 rounded-full border-2 border-gold-500/30"
         animate={isRecording ? {
@@ -102,7 +94,6 @@ function RecordingAnimation({ isRecording }: { isRecording: boolean }) {
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
       />
       
-      {/* Ring 2 */}
       <motion.div
         className="absolute w-20 h-20 rounded-full border-2 border-gold-500/50"
         animate={isRecording ? {
@@ -112,7 +103,6 @@ function RecordingAnimation({ isRecording }: { isRecording: boolean }) {
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: 0.1 }}
       />
       
-      {/* Ring 1 (innermost) */}
       <motion.div
         className="absolute w-14 h-14 rounded-full border-2 border-gold-500/70"
         animate={isRecording ? {
@@ -122,7 +112,6 @@ function RecordingAnimation({ isRecording }: { isRecording: boolean }) {
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
       />
       
-      {/* Center mic button */}
       <motion.div
         className={cn(
           "relative z-10 w-14 h-14 rounded-full flex items-center justify-center",
@@ -149,14 +138,11 @@ function RecordingAnimation({ isRecording }: { isRecording: boolean }) {
 function ProcessingAnimation() {
   return (
     <div className="relative w-32 h-32 flex items-center justify-center">
-      {/* Spinning ring */}
       <motion.div
         className="absolute w-24 h-24 rounded-full border-2 border-transparent border-t-gold-500 border-r-gold-500/50"
         animate={{ rotate: 360 }}
         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
       />
-      
-      {/* Center */}
       <div className="relative z-10 w-14 h-14 rounded-full bg-verse-elevated border border-verse-border flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-gold-500 animate-spin" />
       </div>
@@ -192,7 +178,6 @@ function ConfidenceRing({ confidence, size = 64 }: { confidence: number; size?: 
           className="text-verse-border"
         />
       </svg>
-      
       <svg className="absolute inset-0 -rotate-90" width={size} height={size}>
         <motion.circle
           cx={size / 2}
@@ -208,7 +193,6 @@ function ConfidenceRing({ confidence, size = 64 }: { confidence: number; size?: 
           transition={{ duration: 1, ease: "easeOut" }}
         />
       </svg>
-      
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.span
           className="text-sm font-bold text-verse-text"
@@ -224,7 +208,7 @@ function ConfidenceRing({ confidence, size = 64 }: { confidence: number; size?: 
 }
 
 // ============================================
-// Typing Effect for Transcribed Text
+// Typing Effect
 // ============================================
 function TypingText({ text, className }: { text: string; className?: string }) {
   const [displayedText, setDisplayedText] = useState('');
@@ -235,10 +219,8 @@ function TypingText({ text, className }: { text: string; className?: string }) {
       setDisplayedText('');
       return;
     }
-    
     let index = 0;
     setDisplayedText('');
-    
     const interval = setInterval(() => {
       if (index < text.length) {
         setDisplayedText(text.slice(0, index + 1));
@@ -248,7 +230,6 @@ function TypingText({ text, className }: { text: string; className?: string }) {
         setTimeout(() => setShowCursor(false), 500);
       }
     }, 30);
-    
     return () => clearInterval(interval);
   }, [text]);
   
@@ -267,167 +248,149 @@ function TypingText({ text, className }: { text: string; className?: string }) {
 }
 
 // ============================================
-// Top Match Card
+// Match Card - Shows loaded state or confirm buttons
 // ============================================
-interface TopMatchCardProps {
+interface MatchCardProps {
   match: SongMatch;
   isInSetlist: boolean;
-  onConfirm: () => void;
-  onReject: () => void;
+  isLoaded: boolean;
+  isTopMatch: boolean;
+  onSelect: () => void;
 }
 
-function TopMatchCard({ match, isInSetlist, onConfirm, onReject }: TopMatchCardProps) {
+function MatchCard({ match, isInSetlist, isLoaded, isTopMatch, onSelect }: MatchCardProps) {
   const confidencePercent = Math.round((match.confidence || 0.8) * 100);
   
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="bg-verse-bg border border-verse-border rounded-2xl p-5 shadow-xl"
-    >
-      <div className="flex gap-4">
-        <div className="flex-shrink-0">
-          <ConfidenceRing confidence={confidencePercent} size={72} />
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <h4 className="text-lg font-semibold text-verse-text truncate">
-            {match.song.title}
-          </h4>
-          <p className="text-sm text-verse-muted truncate">{match.song.artist}</p>
-          
-          <div className="flex items-center gap-2 mt-2">
-            {match.source === 'local' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full text-xs">
-                <Library className="w-3 h-3" />
-                Library
-              </span>
-            )}
-            {isInSetlist && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gold-500/20 text-gold-400 rounded-full text-xs">
-                <Star className="w-3 h-3" />
-                In Setlist
-              </span>
+  // Top match - larger card
+  if (isTopMatch) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "border rounded-2xl p-5 transition-all",
+          isLoaded 
+            ? "bg-green-500/10 border-green-500/50" 
+            : "bg-verse-bg border-verse-border"
+        )}
+      >
+        <div className="flex gap-4">
+          <div className="flex-shrink-0">
+            {isLoaded ? (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="w-[72px] h-[72px] rounded-full bg-green-500/20 flex items-center justify-center"
+              >
+                <Check className="w-8 h-8 text-green-400" />
+              </motion.div>
+            ) : (
+              <ConfidenceRing confidence={confidencePercent} size={72} />
             )}
           </div>
-        </div>
-      </div>
-      
-      <div className="flex gap-3 mt-5">
-        <motion.button
-          onClick={onConfirm}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-gold-500 to-gold-600 text-verse-bg font-semibold rounded-xl shadow-lg shadow-gold-500/25 hover:shadow-gold-500/40 transition-shadow"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Check className="w-5 h-5" />
-          Yes, Load It
-        </motion.button>
-        
-        <motion.button
-          onClick={onReject}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-verse-elevated border border-verse-border text-verse-muted font-medium rounded-xl hover:bg-verse-border hover:text-verse-text transition-colors"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <X className="w-5 h-5" />
-          Not This
-        </motion.button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ============================================
-// Other Matches List
-// ============================================
-interface OtherMatchesProps {
-  matches: SongMatch[];
-  onSelect: (match: SongMatch) => void;
-}
-
-function OtherMatches({ matches, onSelect }: OtherMatchesProps) {
-  if (matches.length === 0) return null;
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.3 }}
-      className="mt-4"
-    >
-      <p className="text-xs text-verse-subtle uppercase tracking-wider mb-2 px-1">
-        Other Matches
-      </p>
-      <div className="space-y-2">
-        {matches.map((match, index) => (
-          <motion.button
-            key={match.song.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 * index }}
-            onClick={() => onSelect(match)}
-            className="w-full flex items-center gap-3 p-3 bg-verse-bg hover:bg-verse-elevated border border-verse-border hover:border-gold-500/30 rounded-xl text-left transition-all group"
-          >
-            <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              match.source === 'local' ? 'bg-green-500/20' : 'bg-verse-border'
-            )}>
-              {match.source === 'local' ? (
-                <Library className="w-4 h-4 text-green-400" />
-              ) : (
-                <Music className="w-4 h-4 text-verse-muted" />
+          
+          <div className="flex-1 min-w-0">
+            {isLoaded && (
+              <p className="text-xs text-green-400 font-medium uppercase tracking-wider mb-1">
+                ✓ Loaded
+              </p>
+            )}
+            <h4 className="text-lg font-semibold text-verse-text truncate">
+              {match.song.title}
+            </h4>
+            <p className="text-sm text-verse-muted truncate">{match.song.artist}</p>
+            
+            <div className="flex items-center gap-2 mt-2">
+              {match.source === 'local' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full text-xs">
+                  <Library className="w-3 h-3" />
+                  Library
+                </span>
+              )}
+              {isInSetlist && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gold-500/20 text-gold-400 rounded-full text-xs">
+                  <Star className="w-3 h-3" />
+                  In Setlist
+                </span>
+              )}
+              {!isLoaded && (
+                <span className="text-xs text-verse-subtle">{confidencePercent}% match</span>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-verse-text truncate group-hover:text-gold-400 transition-colors">
-                {match.song.title}
-              </p>
-              <p className="text-xs text-verse-muted truncate">{match.song.artist}</p>
-            </div>
-            <span className="text-xs text-verse-subtle">
-              {Math.round((match.confidence || 0.8) * 100)}%
-            </span>
-          </motion.button>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-// ============================================
-// Loaded State (shows after confirmation)
-// ============================================
-function LoadedState({ song, onDetectAnother }: { song: Song; onDetectAnother: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="text-center py-6"
-    >
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: "spring", stiffness: 200, damping: 15 }}
-        className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center"
-      >
-        <Check className="w-8 h-8 text-green-400" />
+          </div>
+        </div>
+        
+        {/* Action button */}
+        <div className="mt-4">
+          {isLoaded ? (
+            <button
+              onClick={onSelect}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-verse-elevated border border-verse-border text-verse-muted font-medium rounded-xl hover:bg-verse-border hover:text-verse-text transition-colors text-sm"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Load Different Song
+            </button>
+          ) : (
+            <motion.button
+              onClick={onSelect}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-gold-500 to-gold-600 text-verse-bg font-semibold rounded-xl shadow-lg shadow-gold-500/25 hover:shadow-gold-500/40 transition-shadow"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Check className="w-5 h-5" />
+              Yes, Load It
+            </motion.button>
+          )}
+        </div>
       </motion.div>
-      
-      <p className="text-xs text-verse-subtle uppercase tracking-wider mb-1">Now Playing</p>
-      <h4 className="text-lg font-semibold text-verse-text">{song.title}</h4>
-      <p className="text-sm text-verse-muted">{song.artist}</p>
-      
-      <motion.button
-        onClick={onDetectAnother}
-        className="mt-6 px-6 py-2.5 bg-verse-elevated border border-verse-border text-verse-text text-sm font-medium rounded-xl hover:bg-verse-border transition-colors"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        Detect Another Song
-      </motion.button>
-    </motion.div>
+    );
+  }
+  
+  // Other matches - compact card
+  return (
+    <motion.button
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      onClick={onSelect}
+      className={cn(
+        "w-full flex items-center gap-3 p-3 border rounded-xl text-left transition-all group",
+        isLoaded
+          ? "bg-green-500/10 border-green-500/50"
+          : "bg-verse-bg hover:bg-verse-elevated border-verse-border hover:border-gold-500/30"
+      )}
+    >
+      <div className={cn(
+        "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+        isLoaded
+          ? "bg-green-500/20"
+          : match.source === 'local' 
+            ? "bg-green-500/20" 
+            : "bg-verse-border"
+      )}>
+        {isLoaded ? (
+          <Check className="w-4 h-4 text-green-400" />
+        ) : match.source === 'local' ? (
+          <Library className="w-4 h-4 text-green-400" />
+        ) : (
+          <Music className="w-4 h-4 text-verse-muted" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={cn(
+          "text-sm font-medium truncate transition-colors",
+          isLoaded ? "text-green-400" : "text-verse-text group-hover:text-gold-400"
+        )}>
+          {match.song.title}
+        </p>
+        <p className="text-xs text-verse-muted truncate">{match.song.artist}</p>
+      </div>
+      <span className={cn(
+        "text-xs",
+        isLoaded ? "text-green-400" : "text-verse-subtle"
+      )}>
+        {isLoaded ? "✓" : `${confidencePercent}%`}
+      </span>
+    </motion.button>
   );
 }
 
@@ -442,8 +405,7 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
   const worship = useSessionStore((s) => s.worship);
   const [autoStopSeconds, setAutoStopSeconds] = useState(15);
   const [showTimeSelector, setShowTimeSelector] = useState(false);
-  const [loadedSong, setLoadedSong] = useState<Song | null>(null);
-  const [rejectedIds, setRejectedIds] = useState<Set<string>>(new Set());
+  const [loadedSongId, setLoadedSongId] = useState<string | null>(null);
   
   const {
     status,
@@ -458,248 +420,248 @@ export function EnhancedDetectionPanel({ onSongSelect }: EnhancedDetectionPanelP
     reset,
   } = useWorshipDetection({ autoStopSeconds: autoStopSeconds || null });
   
-  // Filter out rejected matches
-  const filteredMatches = matches.filter(m => !rejectedIds.has(m.song.id));
-  const topMatch = filteredMatches[0];
-  const otherMatches = filteredMatches.slice(1, 4);
-  
-  // Check if top match is in setlist
-  const isInSetlist = topMatch 
-    ? worship.setlistQueue.some(item => item.song?.title?.toLowerCase() === topMatch.song.title.toLowerCase())
-    : false;
+  // Check if match is in setlist
+  const isInSetlist = (songTitle: string) => {
+    return worship.setlistQueue.some(item => 
+      item.song?.title?.toLowerCase() === songTitle.toLowerCase()
+    );
+  };
   
   const handleMicClick = async () => {
     if (isRecording) {
       await stopRecording();
     } else {
-      setRejectedIds(new Set());
-      setLoadedSong(null);
+      setLoadedSongId(null);
       await startRecording();
     }
   };
   
-  const handleConfirm = useCallback((match: SongMatch) => {
+  const handleSelectSong = useCallback((match: SongMatch) => {
     onSongSelect(match.song);
-    setLoadedSong(match.song);
+    setLoadedSongId(match.song.id);
   }, [onSongSelect]);
-  
-  const handleReject = useCallback(() => {
-    if (topMatch) {
-      setRejectedIds(prev => new Set([...prev, topMatch.song.id]));
-    }
-  }, [topMatch]);
-  
-  const handleSelectOther = useCallback((match: SongMatch) => {
-    handleConfirm(match);
-  }, [handleConfirm]);
   
   const handleDetectAnother = useCallback(() => {
     reset();
-    setRejectedIds(new Set());
-    setLoadedSong(null);
+    setLoadedSongId(null);
   }, [reset]);
 
   const getCurrentTimeLabel = () => {
     const opt = TIME_OPTIONS.find(o => o.value === autoStopSeconds);
     return opt?.label || '15s';
   };
+
+  // Reorder matches so loaded song is first (if loaded)
+  const orderedMatches = loadedSongId
+    ? [
+        ...matches.filter(m => m.song.id === loadedSongId),
+        ...matches.filter(m => m.song.id !== loadedSongId),
+      ]
+    : matches;
+  
+  const topMatch = orderedMatches[0];
+  const otherMatches = orderedMatches.slice(1, 4);
   
   return (
-    <>
-      <div className="rounded-2xl border border-verse-border bg-verse-surface overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-verse-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-gold-500 animate-pulse" />
-            <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
-              Song Detection
-            </h3>
-            <span className="px-2 py-0.5 bg-gold-500/20 text-gold-400 text-[10px] font-medium rounded-full uppercase tracking-wider">
-              Enhanced
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-2 relative">
-            {/* Time selector button */}
-            {!loadedSong && status === 'idle' && (
-              <>
-                <motion.button
-                  onClick={() => setShowTimeSelector(!showTimeSelector)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-verse-bg border border-verse-border rounded-lg text-xs text-verse-muted hover:text-verse-text hover:border-gold-500/50 transition-all"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Clock className="w-3 h-3" />
-                  {getCurrentTimeLabel()}
-                </motion.button>
-                
-                <AnimatePresence>
-                  <TimeSelector
-                    isOpen={showTimeSelector}
-                    onClose={() => setShowTimeSelector(false)}
-                    value={autoStopSeconds}
-                    onChange={setAutoStopSeconds}
-                  />
-                </AnimatePresence>
-              </>
-            )}
-            
-            {/* Reset button */}
-            {(status !== 'idle' || loadedSong) && !isRecording && (
-              <button
-                onClick={handleDetectAnother}
-                className="text-xs text-verse-muted hover:text-verse-text transition-colors"
-              >
-                Reset
-              </button>
-            )}
-          </div>
+    <div className="rounded-2xl border border-verse-border bg-verse-surface overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-verse-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-gold-500 animate-pulse" />
+          <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">
+            Song Detection
+          </h3>
+          <span className="px-2 py-0.5 bg-gold-500/20 text-gold-400 text-[10px] font-medium rounded-full uppercase tracking-wider">
+            Enhanced
+          </span>
         </div>
         
-        <div className="p-5">
-          <AnimatePresence mode="wait">
-            {/* Loaded State - After confirmation */}
-            {loadedSong && (
-              <LoadedState 
-                key="loaded" 
-                song={loadedSong} 
-                onDetectAnother={handleDetectAnother} 
-              />
-            )}
-            
-            {/* Idle / Recording / Processing State */}
-            {!loadedSong && (status === 'idle' || isRecording || isProcessing) && (
-              <motion.div
-                key="recording"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-center"
+        <div className="flex items-center gap-2 relative">
+          {/* Time selector - only in idle state */}
+          {status === 'idle' && !loadedSongId && (
+            <>
+              <motion.button
+                onClick={() => setShowTimeSelector(!showTimeSelector)}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-verse-bg border border-verse-border rounded-lg text-xs text-verse-muted hover:text-verse-text hover:border-gold-500/50 transition-all"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
-                <div 
-                  className="flex justify-center mb-4 cursor-pointer"
-                  onClick={handleMicClick}
-                >
-                  {isProcessing ? (
-                    <ProcessingAnimation />
-                  ) : (
-                    <RecordingAnimation isRecording={isRecording} />
-                  )}
-                </div>
-                
-                <motion.p
-                  className="text-sm font-medium text-verse-text mb-1"
-                  animate={{ opacity: isRecording ? [1, 0.7, 1] : 1 }}
-                  transition={{ duration: 1.5, repeat: isRecording ? Infinity : 0 }}
-                >
-                  {isRecording ? 'Listening...' : isProcessing ? 'Processing...' : 'Tap to detect'}
-                </motion.p>
-                
-                {isRecording && (
-                  <p className="text-xs text-verse-muted">
-                    {recordingTime}s {autoStopSeconds ? `/ ${autoStopSeconds}s` : ''}
-                  </p>
-                )}
-                
-                {transcribedText && !isRecording && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 p-3 bg-verse-bg rounded-xl border border-verse-border"
-                  >
-                    <p className="text-xs text-verse-subtle mb-1">Heard:</p>
-                    <p className="text-sm text-verse-text italic">
-                      "<TypingText text={transcribedText.slice(0, 100)} />"
-                    </p>
-                  </motion.div>
-                )}
-                
-                {status === 'idle' && (
-                  <p className="text-xs text-verse-subtle mt-4">
-                    Sing or play the song near your device
-                  </p>
-                )}
-              </motion.div>
-            )}
-            
-            {/* Results State */}
-            {!loadedSong && status === 'complete' && filteredMatches.length > 0 && (
-              <motion.div
-                key="results"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                {transcribedText && (
-                  <div className="mb-4 p-2 bg-verse-bg rounded-lg">
-                    <p className="text-xs text-verse-muted truncate">
-                      Heard: "{transcribedText.slice(0, 60)}..."
-                    </p>
-                  </div>
-                )}
-                
-                {topMatch && (
-                  <TopMatchCard
-                    match={topMatch}
-                    isInSetlist={isInSetlist}
-                    onConfirm={() => handleConfirm(topMatch)}
-                    onReject={handleReject}
-                  />
-                )}
-                
-                <OtherMatches matches={otherMatches} onSelect={handleSelectOther} />
-              </motion.div>
-            )}
-            
-            {/* No Matches State */}
-            {!loadedSong && status === 'complete' && filteredMatches.length === 0 && (
-              <motion.div
-                key="no-results"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-center py-8"
-              >
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-verse-border flex items-center justify-center">
-                  <Music className="w-6 h-6 text-verse-muted" />
-                </div>
-                <p className="text-sm text-verse-text mb-1">No matches found</p>
-                <p className="text-xs text-verse-muted">Try singing more clearly or a different part</p>
-                <button
-                  onClick={handleDetectAnother}
-                  className="mt-4 px-4 py-2 bg-verse-elevated border border-verse-border text-verse-text text-sm rounded-lg hover:bg-verse-border transition-colors"
-                >
-                  Try Again
-                </button>
-              </motion.div>
-            )}
-            
-            {/* Error State */}
-            {!loadedSong && status === 'error' && (
-              <motion.div
-                key="error"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-center py-8"
-              >
-                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-500/20 flex items-center justify-center">
-                  <X className="w-6 h-6 text-red-400" />
-                </div>
-                <p className="text-sm text-verse-text mb-1">{error || 'Something went wrong'}</p>
-                <button
-                  onClick={handleDetectAnother}
-                  className="mt-4 px-4 py-2 bg-verse-elevated border border-verse-border text-verse-text text-sm rounded-lg hover:bg-verse-border transition-colors"
-                >
-                  Try Again
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <Clock className="w-3 h-3" />
+                {getCurrentTimeLabel()}
+              </motion.button>
+              
+              <AnimatePresence>
+                <TimeSelector
+                  isOpen={showTimeSelector}
+                  onClose={() => setShowTimeSelector(false)}
+                  value={autoStopSeconds}
+                  onChange={setAutoStopSeconds}
+                />
+              </AnimatePresence>
+            </>
+          )}
+          
+          {/* Reset - when results showing */}
+          {(status === 'complete' || loadedSongId) && (
+            <button
+              onClick={handleDetectAnother}
+              className="text-xs text-verse-muted hover:text-verse-text transition-colors"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
       
-
-    </>
+      <div className="p-5">
+        <AnimatePresence mode="wait">
+          {/* Idle / Recording / Processing State */}
+          {(status === 'idle' || isRecording || isProcessing) && !loadedSongId && matches.length === 0 && (
+            <motion.div
+              key="recording"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center"
+            >
+              <div 
+                className="flex justify-center mb-4 cursor-pointer"
+                onClick={handleMicClick}
+              >
+                {isProcessing ? (
+                  <ProcessingAnimation />
+                ) : (
+                  <RecordingAnimation isRecording={isRecording} />
+                )}
+              </div>
+              
+              <motion.p
+                className="text-sm font-medium text-verse-text mb-1"
+                animate={{ opacity: isRecording ? [1, 0.7, 1] : 1 }}
+                transition={{ duration: 1.5, repeat: isRecording ? Infinity : 0 }}
+              >
+                {isRecording ? 'Listening...' : isProcessing ? 'Processing...' : 'Tap to detect'}
+              </motion.p>
+              
+              {isRecording && (
+                <p className="text-xs text-verse-muted">
+                  {recordingTime}s {autoStopSeconds ? `/ ${autoStopSeconds}s` : ''}
+                </p>
+              )}
+              
+              {status === 'idle' && (
+                <p className="text-xs text-verse-subtle mt-4">
+                  Sing or play the song near your device
+                </p>
+              )}
+            </motion.div>
+          )}
+          
+          {/* Results State - Stays visible after selection! */}
+          {(status === 'complete' || loadedSongId) && orderedMatches.length > 0 && (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4"
+            >
+              {/* Transcribed text - compact */}
+              {transcribedText && (
+                <div className="p-2 bg-verse-bg rounded-lg">
+                  <p className="text-xs text-verse-muted truncate">
+                    Heard: "{transcribedText.slice(0, 60)}..."
+                  </p>
+                </div>
+              )}
+              
+              {/* Top Match */}
+              {topMatch && (
+                <MatchCard
+                  match={topMatch}
+                  isInSetlist={isInSetlist(topMatch.song.title)}
+                  isLoaded={topMatch.song.id === loadedSongId}
+                  isTopMatch={true}
+                  onSelect={() => handleSelectSong(topMatch)}
+                />
+              )}
+              
+              {/* Other Matches */}
+              {otherMatches.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-verse-subtle uppercase tracking-wider px-1">
+                    Other Matches
+                  </p>
+                  {otherMatches.map((match) => (
+                    <MatchCard
+                      key={match.song.id}
+                      match={match}
+                      isInSetlist={isInSetlist(match.song.title)}
+                      isLoaded={match.song.id === loadedSongId}
+                      isTopMatch={false}
+                      onSelect={() => handleSelectSong(match)}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {/* Detect Another button */}
+              <motion.button
+                onClick={handleDetectAnother}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-verse-bg border border-verse-border text-verse-muted font-medium rounded-xl hover:bg-verse-border hover:text-verse-text transition-colors text-sm mt-4"
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                <Mic className="w-4 h-4" />
+                Detect Another Song
+              </motion.button>
+            </motion.div>
+          )}
+          
+          {/* No Matches */}
+          {status === 'complete' && matches.length === 0 && !loadedSongId && (
+            <motion.div
+              key="no-results"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-8"
+            >
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-verse-border flex items-center justify-center">
+                <Music className="w-6 h-6 text-verse-muted" />
+              </div>
+              <p className="text-sm text-verse-text mb-1">No matches found</p>
+              <p className="text-xs text-verse-muted">Try singing more clearly or a different part</p>
+              <button
+                onClick={handleDetectAnother}
+                className="mt-4 px-4 py-2 bg-verse-elevated border border-verse-border text-verse-text text-sm rounded-lg hover:bg-verse-border transition-colors"
+              >
+                Try Again
+              </button>
+            </motion.div>
+          )}
+          
+          {/* Error State */}
+          {status === 'error' && !loadedSongId && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-8"
+            >
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-500/20 flex items-center justify-center">
+                <X className="w-6 h-6 text-red-400" />
+              </div>
+              <p className="text-sm text-verse-text mb-1">{error || 'Something went wrong'}</p>
+              <button
+                onClick={handleDetectAnother}
+                className="mt-4 px-4 py-2 bg-verse-elevated border border-verse-border text-verse-text text-sm rounded-lg hover:bg-verse-border transition-colors"
+              >
+                Try Again
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }

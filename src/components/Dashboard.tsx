@@ -22,6 +22,7 @@ import { ControlsBar, SettingsDrawer } from '@/components/dashboard-ui';
 import { parseScriptures } from '@/lib/detection/parser';
 import { SmartScriptureSearch } from '@/components/SmartScriptureSearch';
 import { WorshipPanel } from '@/components/WorshipPanel';
+import { OBSRemotePanel } from '@/components/obs';
 
 // ============================================
 // API Status Component
@@ -1161,8 +1162,9 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
               <ReadyToDisplay className="h-full max-h-[calc(100vh-250px)] overflow-y-auto" splitThreshold={splitThreshold} />
             </div>
             
-            {/* Right Column: Display + Translation + Stats + Log */}
+            {/* Right Column: OBS + Display + Translation + Stats + Log */}
             <div className="col-span-12 lg:col-span-4 space-y-4">
+              <OBSRemotePanel />
               <DisplayPreview orgSlug={orgSlug} splitThreshold={splitThreshold} displaySettings={displaySettings} />
               <TranslationSelector />
               <SessionStats />

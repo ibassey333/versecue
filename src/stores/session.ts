@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { TranscriptSegment, DetectionResult, QueueItem, ScriptureReference, SessionStats } from '@/types';
+import { OBSSettings, DEFAULT_OBS_SETTINGS } from '@/types/obs';
 import { fetchVerse } from '@/lib/bible';
 
 interface SessionSettings {
@@ -62,6 +63,9 @@ interface SessionState {
   // Stats
   stats: SessionStats;
   
+  // OBS Integration
+  obsSettings: OBSSettings;
+  
   // Actions
   toggleListening: () => void;
   togglePause: () => void;
@@ -105,6 +109,9 @@ interface SessionState {
   clearSetlist: () => void;
   setDetecting: (isDetecting: boolean) => void;
   setDetectionResults: (results: any[]) => void;
+  
+  // OBS Actions
+  updateOBSSettings: (settings: OBSSettings) => void;
 }
 
 const DEFAULT_SETTINGS: SessionSettings = {
@@ -213,6 +220,7 @@ export const useSessionStore = create<SessionState>()(
       verseParts: [],
       settings: DEFAULT_SETTINGS,
       stats: DEFAULT_STATS,
+      obsSettings: DEFAULT_OBS_SETTINGS,
       
       // Audio actions
       toggleListening: () => set((state) => ({ isListening: !state.isListening, isPaused: false })),
@@ -439,6 +447,7 @@ export const useSessionStore = create<SessionState>()(
         totalParts: 1,
         verseParts: [],
         stats: DEFAULT_STATS,
+      obsSettings: DEFAULT_OBS_SETTINGS,
         isListening: false,
         isPaused: false,
         worship: DEFAULT_WORSHIP_STATE,
@@ -536,6 +545,9 @@ export const useSessionStore = create<SessionState>()(
           detectionResults: results,
         }
       })),
+      
+      // OBS Actions
+      updateOBSSettings: (obsSettings) => set({ obsSettings }),
     }),
     {
       name: 'versecue-session',
@@ -543,6 +555,7 @@ export const useSessionStore = create<SessionState>()(
         settings: state.settings,
         selectedAudioDevice: state.selectedAudioDevice,
         mode: state.mode,
+        obsSettings: state.obsSettings,
       }),
     }
   )

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OBSProvider } from '@/contexts/OBSContext';
 import { Inter, Playfair_Display, Crimson_Pro } from "next/font/google";
 import "./globals.css";
 
@@ -46,7 +47,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable} ${crimsonPro.variable}`}>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}><OBSProvider>{children}</OBSProvider></body>
     </html>
   );
 }

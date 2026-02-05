@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -47,6 +46,11 @@ interface DisplaySettings {
   text_align: string;
   vertical_align: string;
   padding: number;
+  padding_top: number | null;
+  padding_bottom: number | null;
+  padding_left: number | null;
+  padding_right: number | null;
+  padding_advanced: boolean;
   logo_url: string | null;
   logo_position: string;
   logo_size: number;
@@ -75,11 +79,49 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   text_align: 'center',
   vertical_align: 'center',
   padding: 48,
+  padding_top: null,
+  padding_bottom: null,
+  padding_left: null,
+  padding_right: null,
+  padding_advanced: false,
   logo_url: null,
   logo_position: 'none',
   logo_size: 80,
   show_watermark: true,
 };
+
+// ============================================
+// Helper: Generate text outline using text-shadow
+// This creates a clean outline without the artifacts of WebkitTextStroke
+// ============================================
+function generateTextOutline(width: number, color: string): string {
+  if (width <= 0) return '';
+  
+  const shadows: string[] = [];
+  
+  // For thin outlines (1-2px), use 8 directions
+  // For thicker outlines, add more points for smoothness
+  const steps = width <= 2 ? 8 : 16;
+  
+  for (let i = 0; i < steps; i++) {
+    const angle = (2 * Math.PI * i) / steps;
+    const x = Math.round(Math.cos(angle) * width * 10) / 10;
+    const y = Math.round(Math.sin(angle) * width * 10) / 10;
+    shadows.push(`${x}px ${y}px 0 ${color}`);
+  }
+  
+  // Add additional layers for thicker, more solid outlines
+  if (width > 1) {
+    for (let i = 0; i < steps; i++) {
+      const angle = (2 * Math.PI * i) / steps;
+      const x = Math.round(Math.cos(angle) * (width * 0.5) * 10) / 10;
+      const y = Math.round(Math.sin(angle) * (width * 0.5) * 10) / 10;
+      shadows.push(`${x}px ${y}px 0 ${color}`);
+    }
+  }
+  
+  return shadows.join(', ');
+}
 
 // ============================================
 // Display Page Component
@@ -197,9 +239,8 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             if (data.mode === 'displaying' && data.current_song_data) {
               setDisplayMode('worship');
             } else if (data.mode === 'waiting') {
-              // Check if scripture should be shown
               if (!scriptureDisplay?.reference) {
-                setDisplayMode('scripture'); // Will show waiting state
+                setDisplayMode('scripture');
               }
             }
           }
@@ -219,12 +260,14 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     return sections[worshipDisplay.current_section] || '';
   };
 
+  // Vertical alignment class
   const verticalAlignClass = {
     top: 'justify-start pt-8',
     center: 'justify-center',
     bottom: 'justify-end pb-8',
   }[settings.vertical_align] || 'justify-center';
 
+  // Logo position class
   const logoPositionClass = {
     'top-left': 'top-6 left-6',
     'top-right': 'top-6 right-6',
@@ -232,10 +275,58 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     'bottom-right': 'bottom-6 right-6',
   }[settings.logo_position] || '';
 
-  const textStyles: React.CSSProperties = {
+  // Font family mapping
+  const fontFamily = {
+    serif: 'Georgia, "Times New Roman", serif',
+    sans: 'system-ui, -apple-system, sans-serif',
+    mono: '"Courier New", monospace',
+  }[settings.verse_font_family] || 'Georgia, "Times New Roman", serif';
+
+  // Calculate padding
+  const getPadding = () => {
+    if (settings.padding_advanced) {
+      return {
+        paddingTop: settings.padding_top ?? settings.padding,
+        paddingBottom: settings.padding_bottom ?? settings.padding,
+        paddingLeft: settings.padding_left ?? settings.padding,
+        paddingRight: settings.padding_right ?? settings.padding,
+      };
+    }
+    return { padding: settings.padding };
+  };
+
+  // Build text shadow string (combines outline + drop shadow)
+  const buildTextShadow = (): string | undefined => {
+    const shadows: string[] = [];
+    
+    // Add outline shadows
+    if (settings.text_outline && settings.text_outline_width > 0) {
+      const outlineShadow = generateTextOutline(settings.text_outline_width, settings.text_outline_color);
+      if (outlineShadow) shadows.push(outlineShadow);
+    }
+    
+    // Add drop shadow
+    if (settings.text_shadow) {
+      shadows.push('2px 2px 4px rgba(0,0,0,0.5)');
+      shadows.push('0 0 20px rgba(0,0,0,0.3)');
+    }
+    
+    return shadows.length > 0 ? shadows.join(', ') : undefined;
+  };
+
+  const textShadowValue = buildTextShadow();
+
+  // Base text styles (applied to all text: verse, reference, translation)
+  const baseTextStyles: React.CSSProperties = {
+    fontFamily,
+    textShadow: textShadowValue,
+  };
+
+  // Verse-specific styles (adds bold/italic)
+  const verseTextStyles: React.CSSProperties = {
+    ...baseTextStyles,
     fontWeight: settings.verse_bold ? 'bold' : 'normal',
     fontStyle: settings.verse_italic ? 'italic' : 'normal',
-    textShadow: settings.text_shadow ? '2px 2px 4px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.3)' : undefined,
   };
 
   // Render Worship Display
@@ -250,7 +341,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          padding: settings.padding,
+          ...getPadding(),
         }}
       >
         {/* Logo */}
@@ -268,9 +359,9 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           <h1 
             className="font-bold mb-8"
             style={{ 
+              ...baseTextStyles,
               fontSize: settings.reference_font_size,
               color: settings.reference_color,
-              ...textStyles,
             }}
           >
             {worshipDisplay.current_song_data.title}
@@ -278,11 +369,11 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
 
           {/* Lyrics */}
           <pre 
-            className="font-sans leading-relaxed whitespace-pre-wrap"
+            className="leading-relaxed whitespace-pre-wrap"
             style={{ 
+              ...verseTextStyles,
               fontSize: settings.verse_font_size,
               color: settings.verse_color,
-              ...textStyles,
             }}
           >
             {lyrics}
@@ -292,6 +383,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           <p 
             className="mt-8 uppercase tracking-widest"
             style={{ 
+              ...baseTextStyles,
               fontSize: settings.translation_font_size,
               color: settings.translation_color,
             }}
@@ -313,7 +405,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     );
   }
 
-  // Render Scripture Display (existing behavior)
+  // Render Scripture Display
   if (scriptureDisplay?.reference) {
     return (
       <div 
@@ -323,7 +415,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          padding: settings.padding,
+          ...getPadding(),
         }}
       >
         {/* Logo */}
@@ -342,21 +434,32 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             <h1 
               className="font-bold mb-6"
               style={{ 
+                ...baseTextStyles,
                 fontSize: settings.reference_font_size,
                 color: settings.reference_color,
               }}
             >
               {scriptureDisplay.reference}
+              {/* Translation - Inline */}
+              {settings.show_translation && settings.translation_position === 'inline' && scriptureDisplay.translation && (
+                <span 
+                  style={{ 
+                    fontSize: settings.translation_font_size,
+                    color: settings.translation_color,
+                    fontWeight: 'normal',
+                  }}
+                > ({scriptureDisplay.translation})</span>
+              )}
             </h1>
           )}
 
           {/* Verse Text */}
           <p 
-            className="font-serif leading-relaxed"
+            className="leading-relaxed"
             style={{ 
+              ...verseTextStyles,
               fontSize: settings.verse_font_size,
               color: settings.verse_color,
-              ...textStyles,
             }}
           >
             "{scriptureDisplay.verse_text}"
@@ -367,19 +470,31 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             <h1 
               className="font-bold mt-6"
               style={{ 
+                ...baseTextStyles,
                 fontSize: settings.reference_font_size,
                 color: settings.reference_color,
               }}
             >
               {scriptureDisplay.reference}
+              {/* Translation - Inline */}
+              {settings.show_translation && settings.translation_position === 'inline' && scriptureDisplay.translation && (
+                <span 
+                  style={{ 
+                    fontSize: settings.translation_font_size,
+                    color: settings.translation_color,
+                    fontWeight: 'normal',
+                  }}
+                > ({scriptureDisplay.translation})</span>
+              )}
             </h1>
           )}
 
-          {/* Translation */}
-          {settings.show_translation && scriptureDisplay.translation && (
+          {/* Translation - Below */}
+          {settings.show_translation && settings.translation_position === 'below' && scriptureDisplay.translation && (
             <p 
               className="mt-6 uppercase tracking-widest"
               style={{ 
+                ...baseTextStyles,
                 fontSize: settings.translation_font_size,
                 color: settings.translation_color,
               }}
@@ -388,6 +503,20 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             </p>
           )}
         </div>
+
+        {/* Translation - Corner */}
+        {settings.show_translation && settings.translation_position === 'corner' && scriptureDisplay.translation && (
+          <p 
+            className="absolute bottom-6 right-6 uppercase tracking-widest"
+            style={{ 
+              ...baseTextStyles,
+              fontSize: settings.translation_font_size,
+              color: settings.translation_color,
+            }}
+          >
+            {scriptureDisplay.translation}
+          </p>
+        )}
 
         {/* Watermark */}
         {settings.show_watermark && (
@@ -411,17 +540,17 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
         backgroundImage: settings.background_image_url ? `url(${settings.background_image_url})` : undefined,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        padding: settings.padding,
+        ...getPadding(),
       }}
     >
       <div className="text-center">
         <h1 
           className="font-bold mb-4"
-          style={{ color: settings.reference_color, fontSize: 48 }}
+          style={{ ...baseTextStyles, color: settings.reference_color, fontSize: 48 }}
         >
           VerseCue
         </h1>
-        <p style={{ color: settings.translation_color, fontSize: 24 }}>
+        <p style={{ ...baseTextStyles, color: settings.translation_color, fontSize: 24 }}>
           Waiting for content...
         </p>
       </div>

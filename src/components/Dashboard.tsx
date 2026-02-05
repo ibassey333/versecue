@@ -568,6 +568,16 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
                 style={referenceStyles}
               >
                 {currentDisplay.reference.reference}
+                {/* Translation - Inline */}
+                {settings.show_translation && settings.translation_position === 'inline' && currentDisplay.translation && (
+                  <span 
+                    style={{ 
+                      fontSize: settings.translation_font_size * scale,
+                      color: settings.translation_color,
+                      fontWeight: 'normal',
+                    }}
+                  > ({currentDisplay.translation})</span>
+                )}
               </h2>
             )}
             
@@ -583,11 +593,21 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
                 style={referenceStyles}
               >
                 {currentDisplay.reference.reference}
+                {/* Translation - Inline */}
+                {settings.show_translation && settings.translation_position === 'inline' && currentDisplay.translation && (
+                  <span 
+                    style={{ 
+                      fontSize: settings.translation_font_size * scale,
+                      color: settings.translation_color,
+                      fontWeight: 'normal',
+                    }}
+                  > ({currentDisplay.translation})</span>
+                )}
               </h2>
             )}
             
-            {/* Translation - Always below verse, separate from reference */}
-            {settings.show_translation && currentDisplay.translation && (
+            {/* Translation - Below (separate line) */}
+            {settings.show_translation && settings.translation_position === 'below' && currentDisplay.translation && (
               <p 
                 className="mt-2 uppercase tracking-widest"
                 style={translationStyles}
@@ -608,6 +628,16 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
             <div className="text-2xl mb-2">📖</div>
             <p className="text-xs text-gray-400">No scripture displayed</p>
           </div>
+        )}
+        
+        {/* Translation - Corner */}
+        {currentDisplay && settings.show_translation && settings.translation_position === 'corner' && currentDisplay.translation && (
+          <p 
+            className="absolute bottom-2 right-2 uppercase tracking-widest"
+            style={translationStyles}
+          >
+            {currentDisplay.translation}
+          </p>
         )}
         
         {/* Watermark */}

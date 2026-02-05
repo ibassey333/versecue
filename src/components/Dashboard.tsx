@@ -361,13 +361,19 @@ interface DisplaySettingsPreview {
   reference_font_size: number;
   reference_color: string;
   reference_position: string;
-  show_translation: boolean;
+  translation_font_size: number;
   translation_color: string;
+  translation_position: string;
+  show_translation: boolean;
   background_color: string;
   background_image_url: string | null;
   text_align: string;
   vertical_align: string;
   padding: number;
+  logo_url: string | null;
+  logo_position: string;
+  logo_size: number;
+  show_watermark: boolean;
 }
 
 const DEFAULT_DISPLAY_SETTINGS: DisplaySettingsPreview = {
@@ -383,13 +389,19 @@ const DEFAULT_DISPLAY_SETTINGS: DisplaySettingsPreview = {
   reference_font_size: 56,
   reference_color: '#fbbf24',
   reference_position: 'top',
-  show_translation: true,
+  translation_font_size: 16,
   translation_color: '#9ca3af',
+  translation_position: 'below',
+  show_translation: true,
   background_color: '#000000',
   background_image_url: null,
   text_align: 'center',
   vertical_align: 'center',
   padding: 48,
+  logo_url: null,
+  logo_position: 'none',
+  logo_size: 80,
+  show_watermark: true,
 };
 
 function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: { 
@@ -446,17 +458,18 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
     verseStyles.WebkitTextStroke = `${settings.text_outline_width * scale}px ${settings.text_outline_color}`;
   }
   
-  const referenceStyles: React.CSSProperties = {
-    fontFamily,
-    fontSize: settings.reference_font_size * scale,
-    color: settings.reference_color,
-    textAlign: settings.text_align as any,
-  };
-  
   const translationStyles: React.CSSProperties = {
-    fontSize: 10 * scale * 3,
+    fontSize: settings.translation_font_size * scale,
     color: settings.translation_color,
   };
+  
+  // Logo position class
+  const logoPositionClass = {
+    'top-left': 'top-2 left-2',
+    'top-right': 'top-2 right-2',
+    'bottom-left': 'bottom-2 left-2',
+    'bottom-right': 'bottom-2 right-2',
+  }[settings.logo_position] || '';
   
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
@@ -483,28 +496,57 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
           padding: settings.padding * scale,
         }}
       >
+        {/* Logo */}
+        {settings.logo_url && settings.logo_position !== 'none' && (
+          <img
+            src={settings.logo_url}
+            alt="Logo"
+            className={`absolute ${logoPositionClass}`}
+            style={{ width: settings.logo_size * scale, height: 'auto', objectFit: 'contain' }}
+          />
+        )}
+        
         {currentDisplay ? (
-          <>
+          <div className="w-full" style={{ textAlign: settings.text_align as any }}>
+            {/* Reference - Top */}
             {settings.reference_position === 'top' && (
-              <div style={referenceStyles} className="mb-2">
+              <h2 
+                className="font-bold mb-2"
+                style={{ 
+                  fontSize: settings.reference_font_size * scale,
+                  color: settings.reference_color,
+                }}
+              >
                 {currentDisplay.reference.reference}
-                {settings.show_translation && (
-                  <span style={translationStyles} className="ml-2">— {currentDisplay.translation || 'KJV'} —</span>
-                )}
-              </div>
+              </h2>
             )}
             
+            {/* Verse Text */}
             <p style={verseStyles} className="leading-relaxed">
               "{displayText}"
             </p>
             
+            {/* Reference - Bottom */}
             {settings.reference_position === 'bottom' && (
-              <div style={referenceStyles} className="mt-2">
+              <h2 
+                className="font-bold mt-2"
+                style={{ 
+                  fontSize: settings.reference_font_size * scale,
+                  color: settings.reference_color,
+                }}
+              >
                 {currentDisplay.reference.reference}
-                {settings.show_translation && (
-                  <span style={translationStyles} className="ml-2">— {currentDisplay.translation || 'KJV'} —</span>
-                )}
-              </div>
+              </h2>
+            )}
+            
+            {/* Translation - Always below verse, separate from reference */}
+            {settings.show_translation && currentDisplay.translation && (
+              <p 
+                className="mt-2 uppercase tracking-widest"
+                style={translationStyles}
+              >
+                — {currentDisplay.translation} —
+              </p>
             )}
             
             {/* Part indicator */}
@@ -513,11 +555,21 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
                 {currentPart}/{totalParts}
               </div>
             )}
-          </>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center opacity-50">
             <div className="text-2xl mb-2">📖</div>
             <p className="text-xs text-gray-400">No scripture displayed</p>
+          </div>
+        )}
+        
+        {/* Watermark */}
+        {settings.show_watermark && (
+          <div 
+            className="absolute bottom-1 left-2 text-[6px] opacity-50"
+            style={{ color: settings.translation_color }}
+          >
+            Powered by VerseCue
           </div>
         )}
       </div>
@@ -835,13 +887,19 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
             reference_font_size: settings.reference_font_size ?? 56,
             reference_color: settings.reference_color ?? '#fbbf24',
             reference_position: settings.reference_position ?? 'top',
-            show_translation: settings.show_translation ?? true,
+            translation_font_size: settings.translation_font_size ?? 16,
             translation_color: settings.translation_color ?? '#9ca3af',
+            translation_position: settings.translation_position ?? 'below',
+            show_translation: settings.show_translation ?? true,
             background_color: settings.background_color ?? '#000000',
             background_image_url: settings.background_image_url,
             text_align: settings.text_align ?? 'center',
             vertical_align: settings.vertical_align ?? 'center',
             padding: settings.padding ?? 48,
+            logo_url: settings.logo_url ?? null,
+            logo_position: settings.logo_position ?? 'none',
+            logo_size: settings.logo_size ?? 80,
+            show_watermark: settings.show_watermark ?? true,
           });
         }
       }

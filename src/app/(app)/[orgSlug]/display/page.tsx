@@ -161,6 +161,36 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   theme_preset: 'classic',
 };
 
+// ============================================
+// Helper: Generate text outline using text-shadow
+// Creates clean outline without WebkitTextStroke artifacts
+// ============================================
+function generateTextOutline(width: number, color: string): string {
+  if (width <= 0) return '';
+  
+  const shadows: string[] = [];
+  const steps = width <= 2 ? 8 : 16;
+  
+  for (let i = 0; i < steps; i++) {
+    const angle = (2 * Math.PI * i) / steps;
+    const x = Math.round(Math.cos(angle) * width * 10) / 10;
+    const y = Math.round(Math.sin(angle) * width * 10) / 10;
+    shadows.push(`${x}px ${y}px 0 ${color}`);
+  }
+  
+  // Add inner layer for thicker outlines
+  if (width > 1) {
+    for (let i = 0; i < steps; i++) {
+      const angle = (2 * Math.PI * i) / steps;
+      const x = Math.round(Math.cos(angle) * (width * 0.5) * 10) / 10;
+      const y = Math.round(Math.sin(angle) * (width * 0.5) * 10) / 10;
+      shadows.push(`${x}px ${y}px 0 ${color}`);
+    }
+  }
+  
+  return shadows.join(', ');
+}
+
 // Collapsible Section Component
 function Section({ 
   title, 
@@ -633,6 +663,40 @@ export default function DisplaySettingsPage() {
     bottom: 'justify-end pb-4',
   }[settings.vertical_align] || 'justify-center';
 
+  // Font family for inline styles
+  const fontFamily = {
+    serif: 'Georgia, "Times New Roman", serif',
+    sans: 'system-ui, -apple-system, sans-serif',
+    mono: '"Courier New", monospace',
+  }[settings.verse_font_family] || 'Georgia, "Times New Roman", serif';
+
+  // Build text shadow (combines outline + drop shadow) - scaled for preview
+  const buildPreviewTextShadow = (): string | undefined => {
+    const shadows: string[] = [];
+    
+    // Add outline shadows (scaled by /3 for preview)
+    if (settings.text_outline && settings.text_outline_width > 0) {
+      const scaledWidth = settings.text_outline_width / 3;
+      const outlineShadow = generateTextOutline(scaledWidth, settings.text_outline_color);
+      if (outlineShadow) shadows.push(outlineShadow);
+    }
+    
+    // Add drop shadow
+    if (settings.text_shadow) {
+      shadows.push('1px 1px 2px rgba(0,0,0,0.5)');
+    }
+    
+    return shadows.length > 0 ? shadows.join(', ') : undefined;
+  };
+
+  const previewTextShadow = buildPreviewTextShadow();
+
+  // Base text styles for preview (applied to all text)
+  const basePreviewStyles: React.CSSProperties = {
+    fontFamily,
+    textShadow: previewTextShadow,
+  };
+
   return (
     <div className="min-h-screen bg-verse-bg">
       {/* Action Bar */}
@@ -879,7 +943,7 @@ export default function DisplaySettingsPage() {
                           <input
                             type="range"
                             min="1"
-                            max="4"
+                            max="10"
                             value={settings.text_outline_width}
                             onChange={(e) => updateSetting('text_outline_width', parseInt(e.target.value))}
                             className="w-full accent-gold-500"
@@ -962,7 +1026,7 @@ export default function DisplaySettingsPage() {
                       <input
                         type="range"
                         min="12"
-                        max="48"
+                        max="72"
                         value={settings.translation_font_size}
                         onChange={(e) => updateSetting('translation_font_size', parseInt(e.target.value))}
                         className="w-full accent-gold-500"
@@ -1235,6 +1299,7 @@ export default function DisplaySettingsPage() {
                     <h2 
                       className="font-bold mb-1"
                       style={{ 
+                        ...basePreviewStyles,
                         fontSize: settings.reference_font_size / 3,
                         color: settings.reference_color,
                       }}
@@ -1250,12 +1315,11 @@ export default function DisplaySettingsPage() {
                   <p 
                     className={`${fontFamilyClass} leading-relaxed`}
                     style={{ 
+                      ...basePreviewStyles,
                       fontSize: settings.verse_font_size / 3,
                       color: settings.verse_color,
                       fontWeight: settings.verse_bold ? 'bold' : 'normal',
                       fontStyle: settings.verse_italic ? 'italic' : 'normal',
-                      textShadow: settings.text_shadow ? '1px 1px 2px rgba(0,0,0,0.5)' : 'none',
-                      WebkitTextStroke: settings.text_outline ? `${settings.text_outline_width * 0.3}px ${settings.text_outline_color}` : undefined,
                       textAlign: settings.text_align as any,
                     }}
                   >
@@ -1267,6 +1331,7 @@ export default function DisplaySettingsPage() {
                     <h2 
                       className="font-bold mt-1"
                       style={{ 
+                        ...basePreviewStyles,
                         fontSize: settings.reference_font_size / 3,
                         color: settings.reference_color,
                       }}
@@ -1283,6 +1348,7 @@ export default function DisplaySettingsPage() {
                     <p 
                       className="mt-1 uppercase tracking-widest"
                       style={{ 
+                        ...basePreviewStyles,
                         fontSize: settings.translation_font_size / 3,
                         color: settings.translation_color,
                       }}
@@ -1297,6 +1363,7 @@ export default function DisplaySettingsPage() {
                   <p 
                     className="absolute bottom-2 right-2 uppercase tracking-widest"
                     style={{ 
+                      ...basePreviewStyles,
                       fontSize: settings.translation_font_size / 3,
                       color: settings.translation_color,
                     }}

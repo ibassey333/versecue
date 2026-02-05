@@ -404,6 +404,32 @@ const DEFAULT_DISPLAY_SETTINGS: DisplaySettingsPreview = {
   show_watermark: true,
 };
 
+// Helper: Generate text outline using text-shadow (clean, no artifacts)
+function generateTextOutline(width: number, color: string): string {
+  if (width <= 0) return '';
+  
+  const shadows: string[] = [];
+  const steps = width <= 2 ? 8 : 16;
+  
+  for (let i = 0; i < steps; i++) {
+    const angle = (2 * Math.PI * i) / steps;
+    const x = Math.round(Math.cos(angle) * width * 10) / 10;
+    const y = Math.round(Math.sin(angle) * width * 10) / 10;
+    shadows.push(`${x}px ${y}px 0 ${color}`);
+  }
+  
+  if (width > 1) {
+    for (let i = 0; i < steps; i++) {
+      const angle = (2 * Math.PI * i) / steps;
+      const x = Math.round(Math.cos(angle) * (width * 0.5) * 10) / 10;
+      const y = Math.round(Math.sin(angle) * (width * 0.5) * 10) / 10;
+      shadows.push(`${x}px ${y}px 0 ${color}`);
+    }
+  }
+  
+  return shadows.join(', ');
+}
+
 function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: { 
   orgSlug?: string; 
   splitThreshold?: number;
@@ -443,24 +469,51 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
     bottom: 'justify-end pb-4',
   }[settings.vertical_align] || 'justify-center';
   
+  // Build text shadow (combines outline + drop shadow)
+  const buildTextShadow = (): string | undefined => {
+    const shadows: string[] = [];
+    
+    if (settings.text_outline && settings.text_outline_width > 0) {
+      const scaledWidth = settings.text_outline_width * scale;
+      const outlineShadow = generateTextOutline(scaledWidth, settings.text_outline_color);
+      if (outlineShadow) shadows.push(outlineShadow);
+    }
+    
+    if (settings.text_shadow) {
+      shadows.push('1px 1px 2px rgba(0,0,0,0.5)');
+    }
+    
+    return shadows.length > 0 ? shadows.join(', ') : undefined;
+  };
+  
+  const textShadowValue = buildTextShadow();
+  
+  // Base text styles (applied to all text)
+  const baseTextStyles: React.CSSProperties = {
+    fontFamily,
+    textShadow: textShadowValue,
+  };
+  
   // Build verse text styles
   const verseStyles: React.CSSProperties = {
-    fontFamily,
+    ...baseTextStyles,
     fontSize: settings.verse_font_size * scale,
     color: settings.verse_color,
     fontWeight: settings.verse_bold ? 'bold' : 'normal',
     fontStyle: settings.verse_italic ? 'italic' : 'normal',
     textAlign: settings.text_align as any,
-    textShadow: settings.text_shadow ? '1px 1px 2px rgba(0,0,0,0.5)' : 'none',
   };
   
-  if (settings.text_outline) {
-    verseStyles.WebkitTextStroke = `${settings.text_outline_width * scale}px ${settings.text_outline_color}`;
-  }
-  
   const translationStyles: React.CSSProperties = {
+    ...baseTextStyles,
     fontSize: settings.translation_font_size * scale,
     color: settings.translation_color,
+  };
+  
+  const referenceStyles: React.CSSProperties = {
+    ...baseTextStyles,
+    fontSize: settings.reference_font_size * scale,
+    color: settings.reference_color,
   };
   
   // Logo position class
@@ -512,10 +565,7 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
             {settings.reference_position === 'top' && (
               <h2 
                 className="font-bold mb-2"
-                style={{ 
-                  fontSize: settings.reference_font_size * scale,
-                  color: settings.reference_color,
-                }}
+                style={referenceStyles}
               >
                 {currentDisplay.reference.reference}
               </h2>
@@ -530,10 +580,7 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
             {settings.reference_position === 'bottom' && (
               <h2 
                 className="font-bold mt-2"
-                style={{ 
-                  fontSize: settings.reference_font_size * scale,
-                  color: settings.reference_color,
-                }}
+                style={referenceStyles}
               >
                 {currentDisplay.reference.reference}
               </h2>

@@ -530,7 +530,7 @@ function DisplayPreview({ orgSlug, splitThreshold = 70, displaySettings }: {
         <h3 className="font-body text-sm font-semibold text-verse-text tracking-wide uppercase">Live Preview</h3>
         {orgSlug && (
           <Link 
-            href={`/${orgSlug}/display`} 
+            href={`/display/${orgSlug}`} 
             target="_blank"
             className="text-xs text-verse-muted hover:text-gold-400 transition-colors flex items-center gap-1"
           >

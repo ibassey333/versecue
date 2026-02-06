@@ -13,6 +13,7 @@ import { useSessionStore } from '@/stores/session';
 import { EditableSessionModal } from './EditableSessionModal';
 import { useKeyboardShortcuts, SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import { useDisplaySync } from '@/hooks/useDisplaySync';
+import { useWorshipDisplaySync } from '@/hooks/useWorshipDisplaySync';
 import { useAudioCapture } from '@/hooks/useAudioCapture';
 import { detectScriptures } from '@/lib/detection';
 import { fetchVerse } from '@/lib/bible';
@@ -905,6 +906,7 @@ export default function Dashboard({ orgSlug }: { orgSlug?: string }) {
   const [activeSpeechProvider, setActiveSpeechProvider] = useState<'browser' | 'deepgram'>('browser');
   
   const { broadcastDisplay } = useDisplaySync(orgSlug);
+  useWorshipDisplaySync(orgSlug); // Syncs worship mode state to main display
   const transcript = useSessionStore((s) => s.transcript);
   const isListening = useSessionStore((s) => s.isListening);
   const isPaused = useSessionStore((s) => s.isPaused);

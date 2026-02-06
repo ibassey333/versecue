@@ -1,5 +1,5 @@
 // ============================================
-// Session Store v3.0 - With Groq Toggle
+// Session Store v3.1 - Smart Worship Split
 // ============================================
 
 import { create } from 'zustand';
@@ -7,6 +7,7 @@ import { persist } from 'zustand/middleware';
 import { TranscriptSegment, DetectionResult, QueueItem, ScriptureReference, SessionStats } from '@/types';
 import { OBSSettings, DEFAULT_OBS_SETTINGS } from '@/types/obs';
 import { fetchVerse } from '@/lib/bible';
+import { smartSplitLyrics, DisplaySection } from '@/lib/lyrics';
 
 interface SessionSettings {
   translation: string;
@@ -23,7 +24,8 @@ type AppMode = 'sermon' | 'worship';
 
 interface WorshipState {
   currentSong: any | null; // Will be Song type
-  currentSectionIndex: number;
+  currentSectionIndex: number; // -1 = staged (not displaying), >= 0 = displaying
+  displaySections: DisplaySection[]; // Smart-split sections
   setlistQueue: any[]; // Will be SetlistItem[]
   isDetecting: boolean;
   detectionResults: any[]; // Will be SongMatch[]
@@ -99,7 +101,7 @@ interface SessionState {
   toggleMode: () => void;
   
   // Worship Actions
-  setCurrentSong: (song: any | null) => void;
+  setCurrentSong: (song: any | null, splitConfig?: { maxLinesPerPart?: number; maxCharsPerPart?: number }) => void;
   nextSection: () => void;
   prevSection: () => void;
   goToSection: (index: number) => void;
@@ -131,7 +133,8 @@ const DEFAULT_STATS: SessionStats = {
 
 const DEFAULT_WORSHIP_STATE: WorshipState = {
   currentSong: null,
-  currentSectionIndex: 0,
+  currentSectionIndex: -1, // -1 = staged, not displaying
+  displaySections: [],
   setlistQueue: [],
   isDetecting: false,
   detectionResults: [],
@@ -447,7 +450,7 @@ export const useSessionStore = create<SessionState>()(
         totalParts: 1,
         verseParts: [],
         stats: DEFAULT_STATS,
-      obsSettings: DEFAULT_OBS_SETTINGS,
+        obsSettings: DEFAULT_OBS_SETTINGS,
         isListening: false,
         isPaused: false,
         worship: DEFAULT_WORSHIP_STATE,
@@ -459,40 +462,97 @@ export const useSessionStore = create<SessionState>()(
         mode: state.mode === 'sermon' ? 'worship' : 'sermon' 
       })),
       
-      // Worship Actions
-      setCurrentSong: (song) => set((state) => ({
-        worship: { 
-          ...state.worship, 
-          currentSong: song,
-          currentSectionIndex: 0,
-        }
-      })),
+      // ============================================
+      // Worship Actions - Updated with Smart Split
+      // ============================================
       
-      nextSection: () => set((state) => {
-        const song = state.worship.currentSong;
-        if (!song) return state;
-        const sections = song.lyrics.split(/\n\n+/).filter(Boolean); const maxIndex = sections.length - 1;
+      /**
+       * Set current song with smart splitting
+       * Song is staged (currentSectionIndex = -1) until user clicks a section
+       */
+      setCurrentSong: (song, splitConfig) => set((state) => {
+        if (!song) {
+          return {
+            worship: {
+              ...state.worship,
+              currentSong: null,
+              currentSectionIndex: -1,
+              displaySections: [],
+            }
+          };
+        }
+        
+        // Smart split the lyrics
+        const displaySections = smartSplitLyrics(song.lyrics || '', {
+          maxLinesPerPart: splitConfig?.maxLinesPerPart ?? 4,
+          maxCharsPerPart: splitConfig?.maxCharsPerPart ?? 150,
+        });
+        
+        console.log('[Worship] Song loaded:', song.title);
+        console.log('[Worship] Original sections:', song.lyrics?.split(/\n\n+/).filter(Boolean).length || 0);
+        console.log('[Worship] Display sections after smart split:', displaySections.length);
+        
         return {
           worship: {
             ...state.worship,
-            currentSectionIndex: Math.min(state.worship.currentSectionIndex + 1, maxIndex),
+            currentSong: song,
+            currentSectionIndex: -1, // Staged - not displaying until user clicks
+            displaySections,
           }
         };
       }),
       
-      prevSection: () => set((state) => ({
-        worship: {
-          ...state.worship,
-          currentSectionIndex: Math.max(state.worship.currentSectionIndex - 1, 0),
-        }
-      })),
+      /**
+       * Navigate to next section in the flat display array
+       */
+      nextSection: () => set((state) => {
+        const { displaySections, currentSectionIndex } = state.worship;
+        if (displaySections.length === 0) return state;
+        
+        const maxIndex = displaySections.length - 1;
+        const currentIndex = currentSectionIndex < 0 ? -1 : currentSectionIndex;
+        const nextIndex = Math.min(currentIndex + 1, maxIndex);
+        
+        return {
+          worship: {
+            ...state.worship,
+            currentSectionIndex: nextIndex,
+          }
+        };
+      }),
       
-      goToSection: (index) => set((state) => ({
-        worship: {
-          ...state.worship,
-          currentSectionIndex: index,
-        }
-      })),
+      /**
+       * Navigate to previous section in the flat display array
+       */
+      prevSection: () => set((state) => {
+        const { currentSectionIndex } = state.worship;
+        if (currentSectionIndex <= 0) return state;
+        
+        return {
+          worship: {
+            ...state.worship,
+            currentSectionIndex: currentSectionIndex - 1,
+          }
+        };
+      }),
+      
+      /**
+       * Jump to a specific section index
+       * Pass -1 to clear display (return to staged state)
+       */
+      goToSection: (index) => set((state) => {
+        const { displaySections } = state.worship;
+        
+        // Allow -1 for clearing, or valid indices
+        if (index < -1 || index >= displaySections.length) return state;
+        
+        return {
+          worship: {
+            ...state.worship,
+            currentSectionIndex: index,
+          }
+        };
+      }),
       
       addToSetlist: (song) => set((state) => ({
         worship: {

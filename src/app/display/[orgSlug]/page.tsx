@@ -19,6 +19,11 @@ interface WorshipDisplayState {
     title: string;
     artist: string;
     lyrics: string;
+    // Smart split metadata (embedded by useWorshipDisplaySync)
+    current_lyrics?: string;
+    section_label?: string;
+    is_split_part?: boolean;
+    part_info?: string;
   } | null;
   current_section: number;
   total_sections: number;
@@ -92,15 +97,11 @@ const DEFAULT_SETTINGS: DisplaySettings = {
 
 // ============================================
 // Helper: Generate text outline using text-shadow
-// This creates a clean outline without the artifacts of WebkitTextStroke
 // ============================================
 function generateTextOutline(width: number, color: string): string {
   if (width <= 0) return '';
   
   const shadows: string[] = [];
-  
-  // For thin outlines (1-2px), use 8 directions
-  // For thicker outlines, add more points for smoothness
   const steps = width <= 2 ? 8 : 16;
   
   for (let i = 0; i < steps; i++) {
@@ -110,7 +111,6 @@ function generateTextOutline(width: number, color: string): string {
     shadows.push(`${x}px ${y}px 0 ${color}`);
   }
   
-  // Add additional layers for thicker, more solid outlines
   if (width > 1) {
     for (let i = 0; i < steps; i++) {
       const angle = (2 * Math.PI * i) / steps;
@@ -135,7 +135,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   const supabase = createClient();
 
   useEffect(() => {
-    // Fetch initial display settings
     const fetchSettings = async () => {
       const { data: org } = await supabase
         .from('organizations')
@@ -160,7 +159,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   }, [params.orgSlug, supabase]);
 
   useEffect(() => {
-    // Subscribe to scripture display changes
     const fetchScriptureDisplay = async () => {
       const { data } = await supabase
         .from('display_state')
@@ -206,7 +204,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   }, [params.orgSlug, supabase]);
 
   useEffect(() => {
-    // Subscribe to worship display changes
     const fetchWorshipDisplay = async () => {
       const { data } = await supabase
         .from('worship_display_state')
@@ -253,21 +250,46 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     };
   }, [params.orgSlug, supabase, scriptureDisplay]);
 
-  // Get current lyrics section
-  const getCurrentLyrics = () => {
-    if (!worshipDisplay?.current_song_data?.lyrics) return '';
+  // Get current lyrics - uses pre-split lyrics from sync hook if available
+  const getCurrentLyrics = (): string => {
+    if (!worshipDisplay?.current_song_data) return '';
+    
+    // Use pre-split lyrics from smart split (embedded by useWorshipDisplaySync)
+    if (worshipDisplay.current_song_data.current_lyrics) {
+      return worshipDisplay.current_song_data.current_lyrics;
+    }
+    
+    // Fallback: split locally (for backward compatibility)
+    if (!worshipDisplay.current_song_data.lyrics) return '';
     const sections = worshipDisplay.current_song_data.lyrics.split(/\n\n+/).filter(Boolean);
     return sections[worshipDisplay.current_section] || '';
   };
 
-  // Vertical alignment class
+  // Get section info for display
+  const getSectionInfo = (): { label: string; partInfo: string | null } | null => {
+    if (!worshipDisplay?.current_song_data) return null;
+    
+    const { section_label, part_info, is_split_part } = worshipDisplay.current_song_data;
+    
+    if (section_label) {
+      return {
+        label: section_label,
+        partInfo: is_split_part ? part_info || null : null,
+      };
+    }
+    
+    return {
+      label: `${worshipDisplay.current_section + 1}`,
+      partInfo: null,
+    };
+  };
+
   const verticalAlignClass = {
     top: 'justify-start pt-8',
     center: 'justify-center',
     bottom: 'justify-end pb-8',
   }[settings.vertical_align] || 'justify-center';
 
-  // Logo position class
   const logoPositionClass = {
     'top-left': 'top-6 left-6',
     'top-right': 'top-6 right-6',
@@ -275,14 +297,12 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     'bottom-right': 'bottom-6 right-6',
   }[settings.logo_position] || '';
 
-  // Font family mapping
   const fontFamily = {
     serif: 'Georgia, "Times New Roman", serif',
     sans: 'system-ui, -apple-system, sans-serif',
     mono: '"Courier New", monospace',
   }[settings.verse_font_family] || 'Georgia, "Times New Roman", serif';
 
-  // Calculate padding
   const getPadding = () => {
     if (settings.padding_advanced) {
       return {
@@ -295,17 +315,14 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     return { padding: settings.padding };
   };
 
-  // Build text shadow string (combines outline + drop shadow)
   const buildTextShadow = (): string | undefined => {
     const shadows: string[] = [];
     
-    // Add outline shadows
     if (settings.text_outline && settings.text_outline_width > 0) {
       const outlineShadow = generateTextOutline(settings.text_outline_width, settings.text_outline_color);
       if (outlineShadow) shadows.push(outlineShadow);
     }
     
-    // Add drop shadow
     if (settings.text_shadow) {
       shadows.push('2px 2px 4px rgba(0,0,0,0.5)');
       shadows.push('0 0 20px rgba(0,0,0,0.3)');
@@ -316,13 +333,11 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
 
   const textShadowValue = buildTextShadow();
 
-  // Base text styles (applied to all text: verse, reference, translation)
   const baseTextStyles: React.CSSProperties = {
     fontFamily,
     textShadow: textShadowValue,
   };
 
-  // Verse-specific styles (adds bold/italic)
   const verseTextStyles: React.CSSProperties = {
     ...baseTextStyles,
     fontWeight: settings.verse_bold ? 'bold' : 'normal',
@@ -332,6 +347,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   // Render Worship Display
   if (displayMode === 'worship' && worshipDisplay?.mode === 'displaying' && worshipDisplay.current_song_data) {
     const lyrics = getCurrentLyrics();
+    const sectionInfo = getSectionInfo();
     
     return (
       <div 
@@ -344,7 +360,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           ...getPadding(),
         }}
       >
-        {/* Logo */}
         {settings.logo_url && settings.logo_position !== 'none' && (
           <img
             src={settings.logo_url}
@@ -355,7 +370,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
         )}
 
         <div className="w-full" style={{ textAlign: settings.text_align as any }}>
-          {/* Song Title */}
           <h1 
             className="font-bold mb-8"
             style={{ 
@@ -367,7 +381,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             {worshipDisplay.current_song_data.title}
           </h1>
 
-          {/* Lyrics */}
           <pre 
             className="leading-relaxed whitespace-pre-wrap"
             style={{ 
@@ -379,7 +392,19 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             {lyrics}
           </pre>
 
-          {/* Artist */}
+          {sectionInfo?.partInfo && (
+            <p 
+              className="mt-4 text-sm opacity-60"
+              style={{ 
+                ...baseTextStyles,
+                fontSize: Math.max(14, settings.translation_font_size - 2),
+                color: settings.translation_color,
+              }}
+            >
+              {sectionInfo.partInfo}
+            </p>
+          )}
+
           <p 
             className="mt-8 uppercase tracking-widest"
             style={{ 
@@ -392,7 +417,15 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           </p>
         </div>
 
-        {/* Watermark */}
+        {worshipDisplay.total_sections > 1 && (
+          <div 
+            className="absolute bottom-6 right-6 text-sm opacity-50"
+            style={{ color: settings.translation_color }}
+          >
+            {sectionInfo?.label || (worshipDisplay.current_section + 1)} / {worshipDisplay.total_sections}
+          </div>
+        )}
+
         {settings.show_watermark && (
           <div 
             className="absolute bottom-4 left-6 text-sm opacity-50"
@@ -418,7 +451,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           ...getPadding(),
         }}
       >
-        {/* Logo */}
         {settings.logo_url && settings.logo_position !== 'none' && (
           <img
             src={settings.logo_url}
@@ -429,7 +461,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
         )}
 
         <div className="w-full" style={{ textAlign: settings.text_align as any }}>
-          {/* Reference - Top */}
           {settings.reference_position === 'top' && (
             <h1 
               className="font-bold mb-6"
@@ -440,7 +471,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
               }}
             >
               {scriptureDisplay.reference}
-              {/* Translation - Inline */}
               {settings.show_translation && settings.translation_position === 'inline' && scriptureDisplay.translation && (
                 <span 
                   style={{ 
@@ -453,7 +483,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             </h1>
           )}
 
-          {/* Verse Text */}
           <p 
             className="leading-relaxed"
             style={{ 
@@ -465,7 +494,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             "{scriptureDisplay.verse_text}"
           </p>
 
-          {/* Reference - Bottom */}
           {settings.reference_position === 'bottom' && (
             <h1 
               className="font-bold mt-6"
@@ -476,7 +504,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
               }}
             >
               {scriptureDisplay.reference}
-              {/* Translation - Inline */}
               {settings.show_translation && settings.translation_position === 'inline' && scriptureDisplay.translation && (
                 <span 
                   style={{ 
@@ -489,7 +516,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
             </h1>
           )}
 
-          {/* Translation - Below */}
           {settings.show_translation && settings.translation_position === 'below' && scriptureDisplay.translation && (
             <p 
               className="mt-6 uppercase tracking-widest"
@@ -504,7 +530,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           )}
         </div>
 
-        {/* Translation - Corner */}
         {settings.show_translation && settings.translation_position === 'corner' && scriptureDisplay.translation && (
           <p 
             className="absolute bottom-6 right-6 uppercase tracking-widest"
@@ -518,7 +543,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           </p>
         )}
 
-        {/* Watermark */}
         {settings.show_watermark && (
           <div 
             className="absolute bottom-4 left-6 text-sm opacity-50"

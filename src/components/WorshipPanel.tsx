@@ -4,8 +4,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { 
   Music, Search, Mic, Play, SkipForward, SkipBack, Upload, 
   Plus, Loader2, ChevronDown, ChevronUp, X, ExternalLink,
-  Edit3, Save, Check, Library
-, Settings } from 'lucide-react';
+  Edit3, Save, Check, Library, Settings, Video
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSessionStore } from '@/stores/session';
 import { useWorshipDisplaySync } from '@/hooks/useWorshipDisplaySync';
@@ -15,13 +15,8 @@ import { SongImportModal } from './SongImportModal';
 import { LibraryManager } from './LibraryManager';
 import { EnhancedDetectionPanel } from './EnhancedDetectionPanel';
 import { useOrg } from '@/contexts/OrgContext';
-
 import { YouTubeImportModal } from '@/components/YouTubeImportModal';
-import { Video } from 'lucide-react';
-// Helper to split lyrics into sections
-const splitLyrics = (lyrics: string): string[] => {
-  return lyrics.split(/\n\n+/).filter(Boolean);
-};
+import { smartSplitLyrics, DisplaySection, getSectionDisplayInfo } from '@/lib/lyrics';
 
 // ============================================
 // Song Search Component
@@ -32,11 +27,9 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchSource, setSearchSource] = useState<'all' | 'library' | 'lrclib'>('all');
-  const [hasSelected, setHasSelected] = useState(false); // Track if user selected a song
   const [showImportModal, setShowImportModal] = useState(false);
   const [showYouTubeImport, setShowYouTubeImport] = useState(false);
   const [showLibraryManager, setShowLibraryManager] = useState(false);
-  const [librarySongCount, setLibrarySongCount] = useState<number | null>(null);
   const { org } = useOrg();
 
   const searchSongs = useCallback(async (searchQuery: string) => {
@@ -135,25 +128,24 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           >
             <Upload className="w-4 h-4" />
           </button>
-            {/* YouTube/Video Import */}
-            <button
-              onClick={() => setShowYouTubeImport(true)}
-              className="p-2 hover:bg-verse-border rounded-lg transition-colors group"
-              title="Import from YouTube or video/audio file"
-            >
-              <Video className="w-4 h-4 text-verse-muted group-hover:text-gold-500" />
-            </button>
+          <button
+            onClick={() => setShowYouTubeImport(true)}
+            className="p-2 hover:bg-verse-border rounded-lg transition-colors group"
+            title="Import from YouTube or video/audio file"
+          >
+            <Video className="w-4 h-4 text-verse-muted group-hover:text-gold-500" />
+          </button>
         </div>
         <div className="flex items-center gap-1">
           <select
-          value={searchSource}
-          onChange={(e) => setSearchSource(e.target.value as any)}
-          className="text-xs bg-verse-bg border border-verse-border rounded-lg px-2 py-1 text-verse-muted"
-        >
-          <option value="all">All Sources</option>
-          <option value="library">My Library</option>
-          <option value="lrclib">LRCLib</option>
-        </select>
+            value={searchSource}
+            onChange={(e) => setSearchSource(e.target.value as any)}
+            className="text-xs bg-verse-bg border border-verse-border rounded-lg px-2 py-1 text-verse-muted"
+          >
+            <option value="all">All Sources</option>
+            <option value="library">My Library</option>
+            <option value="lrclib">LRCLib</option>
+          </select>
           <button
             onClick={() => setShowLibraryManager(true)}
             className="p-1.5 text-verse-muted hover:text-gold-400 rounded-lg hover:bg-verse-border transition-colors"
@@ -170,10 +162,7 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           <input
             type="text"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setHasSelected(false); // Resume searching on new input
-            }}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by title or artist..."
             className="w-full pl-10 pr-10 py-3 bg-verse-bg border border-verse-border rounded-xl text-verse-text placeholder-verse-muted text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500"
           />
@@ -184,7 +173,6 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
               onClick={() => {
                 setQuery('');
                 setResults([]);
-                setHasSelected(false);
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-verse-muted hover:text-verse-text transition-colors"
               title="Clear search"
@@ -201,9 +189,7 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
             {results.map((match) => (
               <button
                 key={match.song.id}
-                onClick={() => {
-                  onSelect(match.song);
-                }}
+                onClick={() => onSelect(match.song)}
                 className="w-full flex items-center gap-3 p-3 bg-verse-bg hover:bg-verse-border/50 border border-transparent hover:border-gold-500/30 rounded-lg text-left transition-all group"
               >
                 <div className={cn(
@@ -249,22 +235,17 @@ function SongSearch({ onSelect }: { onSelect: (song: Song) => void }) {
           console.log(`Imported ${count} songs`);
         }}
       />
-      {/* YouTube Import Modal */}
       <YouTubeImportModal
         isOpen={showYouTubeImport}
         onClose={() => setShowYouTubeImport(false)}
         onImportComplete={(song) => {
           setShowYouTubeImport(false);
-          // Optionally add to setlist or set as current song
         }}
       />
-      
       <LibraryManager
         isOpen={showLibraryManager}
         onClose={() => setShowLibraryManager(false)}
-        onSongDeleted={() => {
-          // Refresh search if needed
-        }}
+        onSongDeleted={() => {}}
       />
     </div>
   );
@@ -360,7 +341,7 @@ function SetlistQueue() {
 }
 
 // ============================================
-// Enhanced Ready to Display (Full Lyrics View)
+// Enhanced Ready to Display (Smart Split)
 // ============================================
 function ReadyToDisplay() {
   const { org } = useOrg();
@@ -375,6 +356,7 @@ function ReadyToDisplay() {
 
   const song = worship.currentSong;
   const currentIndex = worship.currentSectionIndex;
+  const displaySections = worship.displaySections;
 
   // Initialize edited lyrics when song changes
   useEffect(() => {
@@ -384,9 +366,10 @@ function ReadyToDisplay() {
     }
   }, [song?.id]);
 
-  // Parse lyrics into sections
-  const lyrics = isEditing ? editedLyrics : (song?.lyrics || '');
-  const sections = splitLyrics(lyrics);
+  // Parse lyrics for editing preview
+  const editPreviewSections = isEditing 
+    ? smartSplitLyrics(editedLyrics)
+    : displaySections;
 
   // Save to library
   const handleSave = async () => {
@@ -447,6 +430,9 @@ function ReadyToDisplay() {
       </div>
     );
   }
+
+  // Get original section count for display
+  const originalSectionCount = song.lyrics?.split(/\n\n+/).filter(Boolean).length || 0;
 
   return (
     <div className="flex flex-col rounded-xl border border-verse-border bg-verse-surface h-full">
@@ -536,13 +522,13 @@ function ReadyToDisplay() {
           />
         ) : (
           <div className="space-y-3">
-            {sections.map((section: string, index: number) => {
+            {editPreviewSections.map((section: DisplaySection, index: number) => {
               const isActive = index === currentIndex;
-              const lineCount = section.split('\n').length;
+              const isStaged = currentIndex === -1;
               
               return (
                 <button
-                  key={index}
+                  key={section.id}
                   onClick={() => goToSection(index)}
                   className={cn(
                     'w-full text-left p-4 rounded-xl border-2 transition-all',
@@ -552,20 +538,36 @@ function ReadyToDisplay() {
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <span className={cn(
-                      'flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold flex-shrink-0 mt-0.5',
-                      isActive ? 'bg-gold-500 text-verse-bg' : 'bg-verse-border text-verse-muted'
+                    {/* Section Label Badge */}
+                    <div className={cn(
+                      'flex flex-col items-center gap-1 flex-shrink-0 mt-0.5'
                     )}>
-                      {index + 1}
-                    </span>
+                      <span className={cn(
+                        'flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full text-xs font-bold',
+                        isActive 
+                          ? 'bg-gold-500 text-verse-bg' 
+                          : 'bg-verse-border text-verse-muted'
+                      )}>
+                        {section.label}
+                      </span>
+                      {section.isSplitPart && (
+                        <span className="text-[9px] text-verse-subtle whitespace-nowrap">
+                          {section.partIndex + 1}/{section.totalParts}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Lyrics Text */}
                     <div className="flex-1 min-w-0">
                       <pre className={cn(
                         'text-sm leading-relaxed whitespace-pre-wrap font-sans',
                         isActive ? 'text-verse-text' : 'text-verse-muted'
                       )}>
-                        {section}
+                        {section.text}
                       </pre>
                     </div>
+                    
+                    {/* Live Badge */}
                     {isActive && (
                       <span className="text-[10px] px-2 py-1 rounded-full bg-gold-500 text-verse-bg font-bold flex-shrink-0">
                         LIVE
@@ -582,8 +584,17 @@ function ReadyToDisplay() {
       {/* Footer */}
       {!isEditing && (
         <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50 flex items-center justify-between">
-          <span className="text-xs text-verse-subtle">{sections.length} sections</span>
-          <span className="text-xs text-verse-muted">Click a section to display</span>
+          <span className="text-xs text-verse-subtle">
+            {displaySections.length} parts
+            {displaySections.length !== originalSectionCount && (
+              <span className="text-verse-muted ml-1">
+                (from {originalSectionCount} sections)
+              </span>
+            )}
+          </span>
+          <span className="text-xs text-verse-muted">
+            {currentIndex === -1 ? 'Click a section to display' : `Displaying ${displaySections[currentIndex]?.label || ''}`}
+          </span>
         </div>
       )}
     </div>
@@ -591,7 +602,7 @@ function ReadyToDisplay() {
 }
 
 // ============================================
-// Lyrics Preview
+// Lyrics Preview (Smart Split Aware)
 // ============================================
 function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
   const worship = useSessionStore((s) => s.worship);
@@ -600,10 +611,12 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
 
   const song = worship.currentSong;
   const sectionIndex = worship.currentSectionIndex;
+  const displaySections = worship.displaySections;
 
-  const sections = song ? splitLyrics(song.lyrics) : [];
-  const currentSection = sections[sectionIndex] || '';
-  const totalSections = sections.length;
+  // Get current section
+  const currentSection = sectionIndex >= 0 ? displaySections[sectionIndex] : null;
+  const totalSections = displaySections.length;
+  const isStaged = sectionIndex === -1;
 
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface overflow-hidden">
@@ -624,12 +637,22 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
       </div>
       
       <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-        {song ? (
+        {song && currentSection ? (
           <div className="text-center px-6 py-4 max-h-full overflow-hidden">
             <h2 className="text-gold-400 font-bold text-base mb-3">{song.title}</h2>
             <pre className="text-white text-xs leading-relaxed whitespace-pre-wrap font-sans">
-              {currentSection}
+              {currentSection.text}
             </pre>
+            {currentSection.isSplitPart && (
+              <p className="text-gold-400/60 text-[10px] mt-3">
+                Part {currentSection.partIndex + 1} of {currentSection.totalParts}
+              </p>
+            )}
+          </div>
+        ) : song && isStaged ? (
+          <div className="text-center">
+            <h2 className="text-gold-400 font-bold text-base mb-2">{song.title}</h2>
+            <p className="text-verse-muted text-xs">Click a section to display</p>
           </div>
         ) : (
           <div className="text-center">
@@ -643,14 +666,20 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
         <div className="px-5 py-3 border-t border-verse-border bg-verse-bg/50 flex items-center justify-between">
           <button
             onClick={prevSection}
-            disabled={sectionIndex === 0}
+            disabled={sectionIndex <= 0}
             className="flex items-center gap-1 px-2 py-1 text-xs text-verse-muted hover:text-verse-text disabled:opacity-30 rounded transition-colors"
           >
             <SkipBack className="w-3 h-3" />
             Prev
           </button>
           <span className="text-xs font-medium text-verse-text">
-            {sectionIndex + 1} / {totalSections}
+            {isStaged ? (
+              <span className="text-verse-muted">Staged</span>
+            ) : (
+              <>
+                {currentSection?.label || sectionIndex + 1} / {totalSections}
+              </>
+            )}
           </span>
           <button
             onClick={nextSection}
@@ -674,7 +703,8 @@ function WorshipStats() {
   
   const songsInQueue = worship.setlistQueue.length;
   const currentSong = worship.currentSong;
-  const sections = currentSong ? splitLyrics(currentSong.lyrics).length : 0;
+  const displaySections = worship.displaySections;
+  const originalSections = currentSong?.lyrics?.split(/\n\n+/).filter(Boolean).length || 0;
   
   return (
     <div className="rounded-xl border border-verse-border bg-verse-surface p-5">
@@ -688,11 +718,16 @@ function WorshipStats() {
         </div>
         <div className="text-center">
           <p className="text-2xl font-bold text-green-400">{currentSong ? 1 : 0}</p>
-          <p className="text-[10px] text-verse-muted uppercase tracking-wide">Displayed</p>
+          <p className="text-[10px] text-verse-muted uppercase tracking-wide">Loaded</p>
         </div>
         <div className="text-center">
-          <p className="text-2xl font-bold text-verse-text">{sections}</p>
-          <p className="text-[10px] text-verse-muted uppercase tracking-wide">Sections</p>
+          <p className="text-2xl font-bold text-verse-text">{displaySections.length}</p>
+          <p className="text-[10px] text-verse-muted uppercase tracking-wide">
+            Parts
+            {displaySections.length !== originalSections && originalSections > 0 && (
+              <span className="block text-verse-subtle">({originalSections} orig)</span>
+            )}
+          </p>
         </div>
       </div>
     </div>
@@ -962,7 +997,7 @@ export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
 
   const handleSongSelect = (song: Song) => {
     addToSetlist(song);
-    setCurrentSong(song);
+    setCurrentSong(song); // Song is staged (currentSectionIndex = -1)
   };
 
   return (
@@ -972,37 +1007,37 @@ export function WorshipPanel({ orgSlug }: { orgSlug?: string }) {
         <SongSearch onSelect={handleSongSelect} />
         <SetlistQueue />
         {/* Detection Mode Toggle */}
-              <div className="flex items-center justify-center gap-2 mb-4 p-1 bg-verse-bg rounded-lg">
-                <button
-                  onClick={() => setDetectionMode('enhanced')}
-                  className={cn(
-                    'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
-                    detectionMode === 'enhanced'
-                      ? 'bg-gold-500 text-verse-bg'
-                      : 'text-verse-muted hover:text-verse-text'
-                  )}
-                >
-                  Enhanced
-                </button>
-                <button
-                  onClick={() => setDetectionMode('classic')}
-                  className={cn(
-                    'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
-                    detectionMode === 'classic'
-                      ? 'bg-verse-border text-verse-text'
-                      : 'text-verse-muted hover:text-verse-text'
-                  )}
-                >
-                  Classic
-                </button>
-              </div>
-              
-              {/* Detection Panel - Mode Based */}
-              {detectionMode === 'enhanced' ? (
-                <EnhancedDetectionPanel onSongSelect={handleSongSelect} />
-              ) : (
-                <DetectionPanel onSongSelect={handleSongSelect} />
-              )}
+        <div className="flex items-center justify-center gap-2 mb-4 p-1 bg-verse-bg rounded-lg">
+          <button
+            onClick={() => setDetectionMode('enhanced')}
+            className={cn(
+              'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+              detectionMode === 'enhanced'
+                ? 'bg-gold-500 text-verse-bg'
+                : 'text-verse-muted hover:text-verse-text'
+            )}
+          >
+            Enhanced
+          </button>
+          <button
+            onClick={() => setDetectionMode('classic')}
+            className={cn(
+              'flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+              detectionMode === 'classic'
+                ? 'bg-verse-border text-verse-text'
+                : 'text-verse-muted hover:text-verse-text'
+            )}
+          >
+            Classic
+          </button>
+        </div>
+        
+        {/* Detection Panel - Mode Based */}
+        {detectionMode === 'enhanced' ? (
+          <EnhancedDetectionPanel onSongSelect={handleSongSelect} />
+        ) : (
+          <DetectionPanel onSongSelect={handleSongSelect} />
+        )}
       </div>
 
       {/* Middle Column - Wider for full lyrics */}

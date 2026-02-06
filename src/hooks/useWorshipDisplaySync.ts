@@ -1,5 +1,6 @@
 // ============================================
 // Worship Display Sync Hook - Supabase Realtime
+// v2.0 - Smart split support, staged song state
 // ============================================
 import { useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -12,6 +13,9 @@ interface WorshipDisplayPayload {
   current_lyrics: string | null;
   section_index: number;
   total_sections: number;
+  section_label: string | null;
+  is_split_part: boolean;
+  part_info: string | null; // e.g., "Part 2 of 3"
 }
 
 export function useWorshipDisplaySync(orgSlug?: string) {
@@ -25,26 +29,42 @@ export function useWorshipDisplaySync(orgSlug?: string) {
   const broadcastWorshipDisplay = useCallback(async () => {
     if (mode !== 'worship') return;
     
-    const song = worship.currentSong;
-    const sectionIndex = worship.currentSectionIndex;
+    const { currentSong, currentSectionIndex, displaySections } = worship;
     
-    // Get current section lyrics
+    // Only broadcast if:
+    // 1. We have a song AND
+    // 2. A section is actively selected (index >= 0)
+    const isDisplaying = currentSong && currentSectionIndex >= 0;
+    
+    // Get current section data
     let currentLyrics: string | null = null;
-    let totalSections = 0;
+    let sectionLabel: string | null = null;
+    let isSplitPart = false;
+    let partInfo: string | null = null;
     
-    if (song && song.lyrics) {
-      const sections = song.lyrics.split(/\n\n+/).filter(Boolean);
-      totalSections = sections.length;
-      currentLyrics = sections[sectionIndex] || null;
+    if (isDisplaying && displaySections.length > 0) {
+      const section = displaySections[currentSectionIndex];
+      if (section) {
+        currentLyrics = section.text;
+        sectionLabel = section.label;
+        isSplitPart = section.isSplitPart;
+        
+        if (section.isSplitPart) {
+          partInfo = `Part ${section.partIndex + 1} of ${section.totalParts}`;
+        }
+      }
     }
     
     const payload: WorshipDisplayPayload = {
-      mode: song ? 'displaying' : 'waiting',
-      song_title: song?.title || null,
-      song_artist: song?.artist || null,
+      mode: isDisplaying ? 'displaying' : 'waiting',
+      song_title: currentSong?.title || null,
+      song_artist: currentSong?.artist || null,
       current_lyrics: currentLyrics,
-      section_index: sectionIndex,
-      total_sections: totalSections,
+      section_index: Math.max(0, currentSectionIndex),
+      total_sections: displaySections.length,
+      section_label: sectionLabel,
+      is_split_part: isSplitPart,
+      part_info: partInfo,
     };
     
     try {
@@ -53,10 +73,15 @@ export function useWorshipDisplaySync(orgSlug?: string) {
         .upsert({
           id: sessionId,
           mode: payload.mode,
-          current_song_data: song ? {
-            title: song.title,
-            artist: song.artist,
-            lyrics: song.lyrics,
+          current_song_data: currentSong ? {
+            title: currentSong.title,
+            artist: currentSong.artist,
+            lyrics: currentSong.lyrics,
+            // Smart split metadata (embedded in song_data to avoid schema change)
+            current_lyrics: currentLyrics,
+            section_label: sectionLabel,
+            is_split_part: isSplitPart,
+            part_info: partInfo,
           } : null,
           current_section: payload.section_index,
           total_sections: payload.total_sections,
@@ -66,12 +91,16 @@ export function useWorshipDisplaySync(orgSlug?: string) {
       if (error) {
         console.error('[WorshipSync] Broadcast error:', error);
       } else {
-        console.log('[WorshipSync] Broadcast success - Section', sectionIndex + 1, 'of', totalSections);
+        if (isDisplaying) {
+          console.log('[WorshipSync] Broadcasting section', sectionLabel, '-', currentSectionIndex + 1, 'of', displaySections.length);
+        } else {
+          console.log('[WorshipSync] Cleared display (song staged but no section selected)');
+        }
       }
     } catch (err) {
       console.error('[WorshipSync] Error:', err);
     }
-  }, [sessionId, supabase, worship.currentSong, worship.currentSectionIndex, mode]);
+  }, [sessionId, supabase, worship.currentSong, worship.currentSectionIndex, worship.displaySections, mode]);
 
   // Auto-broadcast when worship state changes
   useEffect(() => {

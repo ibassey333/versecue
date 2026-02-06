@@ -347,7 +347,6 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   // Render Worship Display
   if (displayMode === 'worship' && worshipDisplay?.mode === 'displaying' && worshipDisplay.current_song_data) {
     const lyrics = getCurrentLyrics();
-    const sectionInfo = getSectionInfo();
     
     return (
       <div 
@@ -370,17 +369,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
         )}
 
         <div className="w-full" style={{ textAlign: settings.text_align as any }}>
-          <h1 
-            className="font-bold mb-8"
-            style={{ 
-              ...baseTextStyles,
-              fontSize: settings.reference_font_size,
-              color: settings.reference_color,
-            }}
-          >
-            {worshipDisplay.current_song_data.title}
-          </h1>
-
+          {/* Lyrics Only - No title, no part info, no artist */}
           <pre 
             className="leading-relaxed whitespace-pre-wrap"
             style={{ 
@@ -391,40 +380,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           >
             {lyrics}
           </pre>
-
-          {sectionInfo?.partInfo && (
-            <p 
-              className="mt-4 text-sm opacity-60"
-              style={{ 
-                ...baseTextStyles,
-                fontSize: Math.max(14, settings.translation_font_size - 2),
-                color: settings.translation_color,
-              }}
-            >
-              {sectionInfo.partInfo}
-            </p>
-          )}
-
-          <p 
-            className="mt-8 uppercase tracking-widest"
-            style={{ 
-              ...baseTextStyles,
-              fontSize: settings.translation_font_size,
-              color: settings.translation_color,
-            }}
-          >
-            — {worshipDisplay.current_song_data.artist} —
-          </p>
         </div>
-
-        {worshipDisplay.total_sections > 1 && (
-          <div 
-            className="absolute bottom-6 right-6 text-sm opacity-50"
-            style={{ color: settings.translation_color }}
-          >
-            {sectionInfo?.label || (worshipDisplay.current_section + 1)} / {worshipDisplay.total_sections}
-          </div>
-        )}
 
         {settings.show_watermark && (
           <div 

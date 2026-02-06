@@ -649,15 +649,10 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
               </p>
             )}
           </div>
-        ) : song && isStaged ? (
-          <div className="text-center">
-            <h2 className="text-gold-400 font-bold text-base mb-2">{song.title}</h2>
-            <p className="text-verse-muted text-xs">Click a section to display</p>
-          </div>
         ) : (
+          /* Blank screen when no section selected (staged or no song) */
           <div className="text-center">
-            <Music className="w-8 h-8 text-verse-muted mx-auto mb-2" />
-            <p className="text-verse-muted text-xs">No song displayed</p>
+            {/* Empty - just black background */}
           </div>
         )}
       </div>
@@ -674,7 +669,7 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
           </button>
           <span className="text-xs font-medium text-verse-text">
             {isStaged ? (
-              <span className="text-verse-muted">Staged</span>
+              <span className="text-verse-muted">—</span>
             ) : (
               <>
                 {currentSection?.label || sectionIndex + 1} / {totalSections}
@@ -683,7 +678,7 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
           </span>
           <button
             onClick={nextSection}
-            disabled={sectionIndex >= totalSections - 1}
+            disabled={isStaged || sectionIndex >= totalSections - 1}
             className="flex items-center gap-1 px-2 py-1 text-xs text-verse-muted hover:text-verse-text disabled:opacity-30 rounded transition-colors"
           >
             Next

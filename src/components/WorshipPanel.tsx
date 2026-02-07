@@ -737,7 +737,7 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
             className="w-full max-h-full overflow-hidden"
             style={{ textAlign: settings.text_align as any }}
           >
-            <p className="text-gold-400 text-sm font-semibold mb-3">
+            <p className="text-gold-400 text-base font-bold mb-3 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
               {song.title} • {song.artist}
             </p>
             
@@ -756,7 +756,7 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
             </pre>
             
             {currentSection.isSplitPart && (
-              <p className="text-gold-400/80 text-xs mt-3">
+              <p className="text-gold-400 text-sm font-bold mt-3 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                 Part {currentSection.partIndex + 1} of {currentSection.totalParts}
               </p>
             )}

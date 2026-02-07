@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Music } from 'lucide-react';
 
@@ -132,8 +132,19 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [displayMode, setDisplayMode] = useState<'scripture' | 'worship'>('scripture');
   
-  const supabase = createClient();
+  // Use ref to track scripture state in callbacks without causing re-subscriptions
+  const scriptureDisplayRef = useRef<ScriptureDisplayState | null>(null);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    scriptureDisplayRef.current = scriptureDisplay;
+  }, [scriptureDisplay]);
+  
+  // Create supabase client once
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
 
+  // Fetch display settings
   useEffect(() => {
     const fetchSettings = async () => {
       const { data: org } = await supabase
@@ -158,6 +169,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     fetchSettings();
   }, [params.orgSlug, supabase]);
 
+  // Scripture subscription - SEPARATE from worship
   useEffect(() => {
     const fetchScriptureDisplay = async () => {
       const { data } = await supabase
@@ -203,6 +215,7 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
     };
   }, [params.orgSlug, supabase]);
 
+  // Worship subscription - SEPARATE, no dependency on scriptureDisplay
   useEffect(() => {
     const fetchWorshipDisplay = async () => {
       const { data } = await supabase
@@ -230,25 +243,29 @@ export default function DisplayPage({ params }: { params: { orgSlug: string } })
           filter: `id=eq.${params.orgSlug}`,
         },
         (payload) => {
+          console.log('[Display] Worship update received:', payload.new);
           if (payload.new) {
             const data = payload.new as WorshipDisplayState;
             setWorshipDisplay(data);
             if (data.mode === 'displaying' && data.current_song_data) {
               setDisplayMode('worship');
             } else if (data.mode === 'waiting') {
-              if (!scriptureDisplay?.reference) {
+              // Use ref to avoid stale closure
+              if (!scriptureDisplayRef.current?.reference) {
                 setDisplayMode('scripture');
               }
             }
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Display] Worship channel status:', status);
+      });
 
     return () => {
       supabase.removeChannel(worshipChannel);
     };
-  }, [params.orgSlug, supabase, scriptureDisplay]);
+  }, [params.orgSlug, supabase]); // NO scriptureDisplay dependency!
 
   // Get current lyrics - uses pre-split lyrics from sync hook if available
   const getCurrentLyrics = (): string => {

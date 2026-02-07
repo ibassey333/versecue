@@ -21,9 +21,7 @@ import {
   Upload,
   X,
   Link as LinkIcon,
-  Music,
-  Bookmark,
-  Eye
+  Music
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -129,12 +127,6 @@ interface DisplaySettings {
   worship_auto_split: boolean;
   worship_max_lines: number;
   worship_max_chars: number;
-  // Preview title/part settings (dashboard only)
-  preview_title_color: string;
-  preview_title_size: number;
-  preview_part_color: string;
-  preview_part_size: number;
-  preview_shadow_intensity: number;
 }
 
 const DEFAULT_SETTINGS: DisplaySettings = {
@@ -176,12 +168,6 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   worship_auto_split: true,
   worship_max_lines: 4,
   worship_max_chars: 150,
-  // Preview title/part defaults
-  preview_title_color: '#fbbf24',
-  preview_title_size: 14,
-  preview_part_color: '#fbbf24',
-  preview_part_size: 12,
-  preview_shadow_intensity: 2,
 };
 
 // ============================================
@@ -493,9 +479,6 @@ export default function DisplaySettingsPage() {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [currentVerse, setCurrentVerse] = useState<{ reference: string; text: string; translation: string } | null>(null);
   const [savedSettings, setSavedSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
-  const [presets, setPresets] = useState<Array<{slot: number; name: string; settings: any}>>([]);
-  const [presetLoading, setPresetLoading] = useState(false);
-  const [presetModal, setPresetModal] = useState<{open: boolean; slot: number; name: string}>({open: false, slot: 0, name: ''});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -551,12 +534,6 @@ export default function DisplaySettingsPage() {
           worship_auto_split: data.worship_auto_split ?? DEFAULT_SETTINGS.worship_auto_split,
           worship_max_lines: data.worship_max_lines ?? DEFAULT_SETTINGS.worship_max_lines,
           worship_max_chars: data.worship_max_chars ?? DEFAULT_SETTINGS.worship_max_chars,
-          // Preview title/part settings
-          preview_title_color: data.preview_title_color ?? DEFAULT_SETTINGS.preview_title_color,
-          preview_title_size: data.preview_title_size ?? DEFAULT_SETTINGS.preview_title_size,
-          preview_part_color: data.preview_part_color ?? DEFAULT_SETTINGS.preview_part_color,
-          preview_part_size: data.preview_part_size ?? DEFAULT_SETTINGS.preview_part_size,
-          preview_shadow_intensity: data.preview_shadow_intensity ?? DEFAULT_SETTINGS.preview_shadow_intensity,
         };
         setSettings(loaded);
         setSavedSettings(loaded);
@@ -657,72 +634,6 @@ export default function DisplaySettingsPage() {
   const revertChanges = () => {
     setSettings(savedSettings);
   };
-
-  // Load presets from database
-  const loadPresets = async () => {
-    if (!org) return;
-    const { data } = await supabase
-      .from('display_presets')
-      .select('*')
-      .eq('organization_id', org.id)
-      .order('slot');
-    if (data) setPresets(data);
-  };
-
-  // Open modal to save preset
-  const openSavePresetModal = (slot: number) => {
-    const existing = presets.find(p => p.slot === slot);
-    setPresetModal({
-      open: true,
-      slot,
-      name: existing?.name || `Preset ${slot}`,
-    });
-  };
-
-  // Confirm save preset
-  const confirmSavePreset = async () => {
-    if (!org || !presetModal.open) return;
-    setPresetLoading(true);
-    
-    const { error } = await supabase
-      .from('display_presets')
-      .upsert({
-        organization_id: org.id,
-        slot: presetModal.slot,
-        name: presetModal.name || `Preset ${presetModal.slot}`,
-        settings: settings,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,slot' });
-    
-    if (!error) {
-      await loadPresets();
-    }
-    setPresetModal({open: false, slot: 0, name: ''});
-    setPresetLoading(false);
-  };
-
-  // Load settings from a preset
-  const loadFromPreset = (preset: any) => {
-    if (preset?.settings) {
-      setSettings({ ...DEFAULT_SETTINGS, ...preset.settings });
-    }
-  };
-
-  // Delete a preset
-  const deletePreset = async (slot: number) => {
-    if (!org || !confirm('Delete this preset?')) return;
-    await supabase
-      .from('display_presets')
-      .delete()
-      .eq('organization_id', org.id)
-      .eq('slot', slot);
-    await loadPresets();
-  };
-
-  // Load presets on mount
-  useEffect(() => {
-    if (org) loadPresets();
-  }, [org]);
 
   // Apply theme preset
   const applyPreset = (presetKey: string) => {
@@ -1414,158 +1325,6 @@ export default function DisplaySettingsPage() {
                 )}
               </div>
             </Section>
-
-            {/* Preview Title/Part Settings */}
-            <Section title="Preview Labels" icon={Eye} defaultOpen={false}>
-              <p className="text-xs text-verse-muted mb-4">
-                Customize how song title and part info appear in your dashboard preview. These are only visible to operators.
-              </p>
-              <div className="space-y-4">
-                {/* Title Color */}
-                <div>
-                  <label className="block text-sm text-verse-muted mb-2">Title Color</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={settings.preview_title_color}
-                      onChange={(e) => updateSetting('preview_title_color', e.target.value)}
-                      className="w-10 h-8 rounded cursor-pointer border border-verse-border"
-                    />
-                    <input
-                      type="text"
-                      value={settings.preview_title_color}
-                      onChange={(e) => updateSetting('preview_title_color', e.target.value)}
-                      className="flex-1 px-3 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text font-mono text-sm"
-                    />
-                  </div>
-                </div>
-                
-                {/* Title Size */}
-                <div>
-                  <label className="block text-sm text-verse-muted mb-2">
-                    Title Size: {settings.preview_title_size}px
-                  </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="24"
-                    value={settings.preview_title_size}
-                    onChange={(e) => updateSetting('preview_title_size', parseInt(e.target.value))}
-                    className="w-full accent-gold-500"
-                  />
-                </div>
-                
-                {/* Part Color */}
-                <div>
-                  <label className="block text-sm text-verse-muted mb-2">Part Info Color</label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={settings.preview_part_color}
-                      onChange={(e) => updateSetting('preview_part_color', e.target.value)}
-                      className="w-10 h-8 rounded cursor-pointer border border-verse-border"
-                    />
-                    <input
-                      type="text"
-                      value={settings.preview_part_color}
-                      onChange={(e) => updateSetting('preview_part_color', e.target.value)}
-                      className="flex-1 px-3 py-1.5 bg-verse-bg border border-verse-border rounded-lg text-verse-text font-mono text-sm"
-                    />
-                  </div>
-                </div>
-                
-                {/* Part Size */}
-                <div>
-                  <label className="block text-sm text-verse-muted mb-2">
-                    Part Info Size: {settings.preview_part_size}px
-                  </label>
-                  <input
-                    type="range"
-                    min="8"
-                    max="18"
-                    value={settings.preview_part_size}
-                    onChange={(e) => updateSetting('preview_part_size', parseInt(e.target.value))}
-                    className="w-full accent-gold-500"
-                  />
-                </div>
-                
-                {/* Shadow Intensity */}
-                <div>
-                  <label className="block text-sm text-verse-muted mb-2">
-                    Shadow Intensity: {['None', 'Light', 'Medium', 'Strong'][settings.preview_shadow_intensity]}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3"
-                    value={settings.preview_shadow_intensity}
-                    onChange={(e) => updateSetting('preview_shadow_intensity', parseInt(e.target.value))}
-                    className="w-full accent-gold-500"
-                  />
-                  <div className="flex justify-between text-[10px] text-verse-muted mt-1">
-                    <span>None</span>
-                    <span>Light</span>
-                    <span>Medium</span>
-                    <span>Strong</span>
-                  </div>
-                </div>
-              </div>
-            </Section>
-
-            {/* Saved Presets */}
-            <Section title="Saved Presets" icon={Bookmark} defaultOpen={false}>
-              <p className="text-xs text-verse-muted mb-4">
-                Save your favorite display configurations and switch between them instantly.
-              </p>
-              <div className="space-y-3">
-                {[1, 2, 3].map((slot) => {
-                  const preset = presets.find(p => p.slot === slot);
-                  return (
-                    <div 
-                      key={slot}
-                      className="flex items-center justify-between p-3 bg-verse-bg rounded-xl border border-verse-border"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-verse-text truncate">
-                          {preset ? preset.name : `Slot ${slot}`}
-                        </p>
-                        <p className="text-xs text-verse-muted">
-                          {preset ? 'Saved' : 'Empty'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-3">
-                        {preset && (
-                          <>
-                            <button
-                              onClick={() => loadFromPreset(preset)}
-                              disabled={presetLoading}
-                              className="px-3 py-1.5 text-xs font-medium text-gold-400 hover:text-gold-300 border border-gold-500/30 hover:border-gold-500/50 rounded-lg transition-colors"
-                            >
-                              Load
-                            </button>
-                            <button
-                              onClick={() => deletePreset(slot)}
-                              disabled={presetLoading}
-                              className="p-1.5 text-verse-muted hover:text-red-400 transition-colors"
-                              title="Delete preset"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => openSavePresetModal(slot)}
-                          disabled={presetLoading}
-                          className="px-3 py-1.5 text-xs font-medium bg-verse-surface hover:bg-verse-elevated text-verse-text rounded-lg transition-colors"
-                        >
-                          {preset ? 'Update' : 'Save'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Section>
           </div>
 
           {/* Live Preview */}
@@ -1704,45 +1463,6 @@ export default function DisplaySettingsPage() {
           </div>
         </div>
       </div>
-
-      {/* Preset Name Modal */}
-      {presetModal.open && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-verse-surface border border-verse-border rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-verse-border">
-              <h3 className="text-lg font-semibold text-verse-text">Save Preset</h3>
-              <p className="text-sm text-verse-muted mt-1">Name your display configuration</p>
-            </div>
-            <div className="px-6 py-5">
-              <label className="block text-sm text-verse-muted mb-2">Preset Name</label>
-              <input
-                type="text"
-                value={presetModal.name}
-                onChange={(e) => setPresetModal(prev => ({...prev, name: e.target.value}))}
-                placeholder="e.g., Sunday Morning, Youth Night"
-                className="w-full px-4 py-3 bg-verse-bg border border-verse-border rounded-xl text-verse-text focus:outline-none focus:border-gold-500 transition-colors"
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && confirmSavePreset()}
-              />
-            </div>
-            <div className="px-6 py-4 border-t border-verse-border flex justify-end gap-3">
-              <button
-                onClick={() => setPresetModal({open: false, slot: 0, name: ''})}
-                className="px-4 py-2 text-sm font-medium text-verse-muted hover:text-verse-text transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSavePreset}
-                disabled={presetLoading}
-                className="px-5 py-2 text-sm font-semibold bg-gold-500 text-verse-bg rounded-xl hover:bg-gold-400 transition-colors disabled:opacity-50"
-              >
-                {presetLoading ? 'Saving...' : 'Save Preset'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

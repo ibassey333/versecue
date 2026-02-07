@@ -101,7 +101,7 @@ interface SessionState {
   toggleMode: () => void;
   
   // Worship Actions
-  setCurrentSong: (song: any | null, splitConfig?: { maxLinesPerPart?: number; maxCharsPerPart?: number }) => void;
+  setCurrentSong: (song: any | null, splitConfig?: { maxLinesPerPart?: number; maxCharsPerPart?: number; autoSplitEnabled?: boolean }) => void;
   nextSection: () => void;
   prevSection: () => void;
   goToSection: (index: number) => void;
@@ -486,6 +486,7 @@ export const useSessionStore = create<SessionState>()(
         const displaySections = smartSplitLyrics(song.lyrics || '', {
           maxLinesPerPart: splitConfig?.maxLinesPerPart ?? 4,
           maxCharsPerPart: splitConfig?.maxCharsPerPart ?? 150,
+          autoSplitEnabled: splitConfig?.autoSplitEnabled ?? true,
         });
         
         console.log('[Worship] Song loaded:', song.title);

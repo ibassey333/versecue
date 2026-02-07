@@ -38,12 +38,15 @@ export interface SplitConfig {
   maxCharsPerPart: number;
   /** Minimum lines per part - we try to show at least this many (default: 2) */
   minLinesPerPart: number;
+  /** Whether auto-split is enabled (default: true). If false, uses original sections without splitting */
+  autoSplitEnabled: boolean;
 }
 
 const DEFAULT_SPLIT_CONFIG: SplitConfig = {
   maxLinesPerPart: 4,
   maxCharsPerPart: 150,
   minLinesPerPart: 2,
+  autoSplitEnabled: true,
 };
 
 /**
@@ -131,6 +134,25 @@ export function smartSplitLyrics(
   
   // Split into original sections by double newline
   const originalSections = lyrics.split(/\n\n+/).filter(Boolean);
+  
+  // If auto-split is disabled, return original sections without splitting
+  if (!fullConfig.autoSplitEnabled) {
+    return originalSections.map((sectionText, index) => {
+      const trimmedText = sectionText.trim();
+      const lines = trimmedText.split('\n').filter(Boolean);
+      return {
+        id: `section-${index}`,
+        originalIndex: index,
+        partIndex: 0,
+        totalParts: 1,
+        text: trimmedText,
+        label: `${index + 1}`,
+        lineCount: lines.length,
+        charCount: trimmedText.length,
+        isSplitPart: false,
+      };
+    });
+  }
   
   const displaySections: DisplaySection[] = [];
   let displayIndex = 0;

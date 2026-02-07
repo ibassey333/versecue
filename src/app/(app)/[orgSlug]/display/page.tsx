@@ -20,7 +20,8 @@ import {
   ChevronUp,
   Upload,
   X,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Music
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -122,6 +123,10 @@ interface DisplaySettings {
   logo_size: number;
   show_watermark: boolean;
   theme_preset: string;
+  // Worship lyrics settings
+  worship_auto_split: boolean;
+  worship_max_lines: number;
+  worship_max_chars: number;
 }
 
 const DEFAULT_SETTINGS: DisplaySettings = {
@@ -159,6 +164,10 @@ const DEFAULT_SETTINGS: DisplaySettings = {
   logo_size: 80,
   show_watermark: true,
   theme_preset: 'classic',
+  // Worship lyrics defaults
+  worship_auto_split: true,
+  worship_max_lines: 4,
+  worship_max_chars: 150,
 };
 
 // ============================================
@@ -521,6 +530,10 @@ export default function DisplaySettingsPage() {
           logo_size: data.logo_size ?? DEFAULT_SETTINGS.logo_size,
           show_watermark: data.show_watermark ?? DEFAULT_SETTINGS.show_watermark,
           theme_preset: data.theme_preset ?? DEFAULT_SETTINGS.theme_preset,
+          // Worship lyrics settings
+          worship_auto_split: data.worship_auto_split ?? DEFAULT_SETTINGS.worship_auto_split,
+          worship_max_lines: data.worship_max_lines ?? DEFAULT_SETTINGS.worship_max_lines,
+          worship_max_chars: data.worship_max_chars ?? DEFAULT_SETTINGS.worship_max_chars,
         };
         setSettings(loaded);
         setSavedSettings(loaded);
@@ -1250,6 +1263,66 @@ export default function DisplaySettingsPage() {
                     settings.show_watermark ? 'translate-x-5' : 'translate-x-0.5'
                   }`} />
                 </button>
+              </div>
+            </Section>
+
+            {/* Worship Lyrics */}
+            <Section title="Worship Lyrics" icon={Music} defaultOpen={false}>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm text-verse-text">Auto-split Long Sections</span>
+                    <p className="text-xs text-verse-muted">Split lengthy lyrics into readable parts</p>
+                  </div>
+                  <button
+                    onClick={() => updateSetting('worship_auto_split', !settings.worship_auto_split)}
+                    className={`w-11 h-6 rounded-full transition-colors ${
+                      settings.worship_auto_split ? 'bg-gold-500' : 'bg-verse-border'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      settings.worship_auto_split ? 'translate-x-5' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+                
+                {settings.worship_auto_split && (
+                  <>
+                    <div>
+                      <label className="block text-sm text-verse-muted mb-2">
+                        Max Lines Per Part: {settings.worship_max_lines}
+                      </label>
+                      <input
+                        type="range"
+                        min="2"
+                        max="8"
+                        value={settings.worship_max_lines}
+                        onChange={(e) => updateSetting('worship_max_lines', parseInt(e.target.value))}
+                        className="w-full accent-gold-500"
+                      />
+                      <p className="text-xs text-verse-muted mt-1">
+                        Sections with more lines will be split
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-verse-muted mb-2">
+                        Max Characters Per Part: {settings.worship_max_chars}
+                      </label>
+                      <input
+                        type="range"
+                        min="80"
+                        max="300"
+                        step="10"
+                        value={settings.worship_max_chars}
+                        onChange={(e) => updateSetting('worship_max_chars', parseInt(e.target.value))}
+                        className="w-full accent-gold-500"
+                      />
+                      <p className="text-xs text-verse-muted mt-1">
+                        Sections exceeding this length will be split
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </Section>
           </div>

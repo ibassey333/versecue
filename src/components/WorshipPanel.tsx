@@ -666,17 +666,17 @@ function LyricsPreview({ orgSlug }: { orgSlug?: string }) {
 
   const scaleFactor = 0.35;
 
-  const fontFamily = {
+  const fontFamily = ({
     serif: 'Georgia, "Times New Roman", serif',
     sans: 'system-ui, -apple-system, sans-serif',
     mono: '"Courier New", monospace',
-  }[settings.verse_font_family] || 'Georgia, "Times New Roman", serif';
+  } as Record<string, string>)[settings.verse_font_family] || 'Georgia, "Times New Roman", serif';
 
-  const verticalAlignClass = {
+  const verticalAlignClass = ({
     top: 'justify-start',
     center: 'justify-center',
     bottom: 'justify-end',
-  }[settings.vertical_align] || 'justify-center';
+  } as Record<string, string>)[settings.vertical_align] || 'justify-center';
 
   // Generate text outline
   const generateTextOutline = (width: number, color: string): string => {

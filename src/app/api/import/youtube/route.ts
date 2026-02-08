@@ -33,108 +33,34 @@ async function ensureDir() { if (!existsSync(TEMP_DIR)) await mkdir(TEMP_DIR, { 
 async function cleanup(...paths: (string | null)[]) { for (const p of paths) if (p && existsSync(p)) await unlink(p).catch(() => {}); }
 
 // ============================================
-// Production: youtubei.js
+// Production: Feature not available message
 // ============================================
-async function getYoutubeInfo(vid: string) {
-  try {
-    const { Innertube } = await import('youtubei.js');
-    const yt = await Innertube.create();
-    
-    console.log(`[YT-Prod] Fetching info for ${vid}...`);
-    const info = await yt.getBasicInfo(vid);
-    
-    const title = info.basic_info?.title || 'Unknown';
-    const channel = info.basic_info?.author || 'Unknown';
-    const duration = info.basic_info?.duration || 0;
-    
-    // Get audio format
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
-    
-    if (!format?.decipher) {
-      console.log('[YT-Prod] No audio format found');
-      return null;
-    }
-    
-    const audioUrl = await format.decipher(yt.session.player);
-    
-    return { title, channel, duration, audioUrl };
-  } catch (error) {
-    console.error('[YT-Prod] youtubei.js error:', error);
-    return null;
-  }
+function handleProductionRequest(): NextResponse {
+  return NextResponse.json({ 
+    error: 'Not available', 
+    message: 'YouTube import is currently available only in the VerseCue desktop app. Please run VerseCue locally to use this feature.',
+    productionLimited: true
+  }, { status: 503 });
 }
 
-async function handleProductionRequest(body: any): Promise<NextResponse> {
-  const { url } = body;
-  const id = videoId(url);
-  if (!id) return NextResponse.json({ error: 'Invalid URL', message: 'Not a valid YouTube URL' }, { status: 400 });
-
-  console.log(`[YT-Prod] Video: ${id}`);
-  
-  const info = await getYoutubeInfo(id);
-  
-  if (!info?.audioUrl) {
-    return NextResponse.json({ 
-      error: 'Extraction failed', 
-      message: 'Unable to extract audio. YouTube may be blocking this request. Try again later or use a different video.' 
-    }, { status: 503 });
-  }
-
-  console.log(`[YT-Prod] Got audio URL, downloading...`);
-  
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
-    
-    const response = await fetch(info.audioUrl, { 
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-    clearTimeout(timeout);
-    
-    if (!response.ok) {
-      console.log(`[YT-Prod] Download failed: ${response.status}`);
-      return NextResponse.json({ error: 'Download failed', message: 'Could not download audio stream' }, { status: 500 });
-    }
-    
-    const buf = Buffer.from(await response.arrayBuffer());
-    console.log(`[YT-Prod] Done: ${(buf.length / 1024 / 1024).toFixed(1)}MB`);
-
-    return new NextResponse(buf, {
-      headers: {
-        'Content-Type': 'audio/webm',
-        'Content-Length': buf.length.toString(),
-        'X-Video-Title': encodeURIComponent(info.title),
-        'X-Video-Channel': encodeURIComponent(info.channel),
-        'X-Video-Duration': String(info.duration),
-      },
-    });
-  } catch (error) {
-    console.error('[YT-Prod] Download error:', error);
-    return NextResponse.json({ error: 'Download failed', message: 'Network error during download' }, { status: 500 });
-  }
-}
-
-async function handleProductionGet(url: string): Promise<NextResponse> {
+function handleProductionGet(url: string): NextResponse {
+  // Allow fetching video info in production (just metadata, no download)
   const id = videoId(url);
   if (!id) return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
   
-  const info = await getYoutubeInfo(id);
-  if (info) {
-    return NextResponse.json({ 
-      title: info.title, 
-      duration: info.duration, 
-      channel: info.channel, 
-      thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg` 
-    });
-  }
-  return NextResponse.json({ error: 'Failed to get video info' }, { status: 500 });
+  // Return basic info using YouTube's public thumbnail API
+  return NextResponse.json({ 
+    title: 'YouTube Video',
+    duration: 0,
+    channel: 'Unknown',
+    thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
+    productionLimited: true,
+    message: 'Full YouTube import available in desktop app only'
+  });
 }
 
 // ============================================
-// Local: yt-dlp
+// Local: yt-dlp (fully functional)
 // ============================================
 async function handleLocalRequest(body: any): Promise<NextResponse> {
   let rawFile: string | null = null, outFile: string | null = null;
@@ -218,8 +144,8 @@ async function handleLocalGet(url: string): Promise<NextResponse> {
 export async function POST(request: NextRequest) {
   const body = await request.json();
   if (IS_PRODUCTION) { 
-    console.log('[YT] Production mode (youtubei.js)'); 
-    return handleProductionRequest(body); 
+    console.log('[YT] Production - feature limited'); 
+    return handleProductionRequest(); 
   }
   console.log('[YT] Local mode (yt-dlp)');
   return handleLocalRequest(body);

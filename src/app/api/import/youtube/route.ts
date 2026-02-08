@@ -55,7 +55,7 @@ async function getYoutubeInfo(vid: string) {
       return null;
     }
     
-    const audioUrl = format.decipher(yt.session.player);
+    const audioUrl = await format.decipher(yt.session.player);
     
     return { title, channel, duration, audioUrl };
   } catch (error) {

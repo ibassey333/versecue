@@ -12,12 +12,6 @@ const MAX_SERVICE = 4 * 60 * 60;
 const PATH_EXT = '/opt/homebrew/bin:/usr/local/bin:/usr/bin';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-const PIPED_INSTANCES = [
-  'https://pipedapi.kavin.rocks',
-  'https://pipedapi.adminforge.de',
-  'https://pipedapi.in.projectsegfau.lt',
-];
-
 function videoId(url: string): string | null {
   const patterns = [/youtube\.com\/watch\?v=([\w-]+)/, /youtu\.be\/([\w-]+)/, /youtube\.com\/embed\/([\w-]+)/];
   for (const p of patterns) { const m = url.match(p); if (m) return m[1]; }
@@ -39,74 +33,104 @@ async function ensureDir() { if (!existsSync(TEMP_DIR)) await mkdir(TEMP_DIR, { 
 async function cleanup(...paths: (string | null)[]) { for (const p of paths) if (p && existsSync(p)) await unlink(p).catch(() => {}); }
 
 // ============================================
-// Production: Piped + Cobalt
+// Production: youtubei.js
 // ============================================
-async function fetchTimeout(url: string, opts: RequestInit = {}, ms = 15000): Promise<Response> {
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
-  try { const r = await fetch(url, { ...opts, signal: c.signal }); clearTimeout(t); return r; }
-  catch (e) { clearTimeout(t); throw e; }
-}
-
-async function getPipedInfo(vid: string) {
-  for (const inst of PIPED_INSTANCES) {
-    try {
-      console.log(`[YT] Trying Piped: ${inst}`);
-      const r = await fetchTimeout(`${inst}/streams/${vid}`);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const audio = d.audioStreams?.filter((s: any) => s.mimeType?.includes('audio'))?.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-      if (audio?.url) return { title: d.title || 'Unknown', duration: d.duration || 0, channel: d.uploader || 'Unknown', audioUrl: audio.url };
-    } catch (e) { console.log(`[YT] Piped ${inst} failed`); }
-  }
-  return null;
-}
-
-async function getCobaltInfo(vid: string) {
+async function getYoutubeInfo(vid: string) {
   try {
-    console.log('[YT] Trying Cobalt');
-    const r = await fetchTimeout('https://api.cobalt.tools', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ url: `https://youtube.com/watch?v=${vid}`, audioFormat: 'mp3', isAudioOnly: true }),
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    if (d.url) return { title: d.filename?.replace(/\.[^.]+$/, '') || 'YouTube Audio', duration: 0, channel: 'Unknown', audioUrl: d.url };
-  } catch (e) { console.log('[YT] Cobalt failed'); }
-  return null;
+    const { Innertube } = await import('youtubei.js');
+    const yt = await Innertube.create();
+    
+    console.log(`[YT-Prod] Fetching info for ${vid}...`);
+    const info = await yt.getBasicInfo(vid);
+    
+    const title = info.basic_info?.title || 'Unknown';
+    const channel = info.basic_info?.author || 'Unknown';
+    const duration = info.basic_info?.duration || 0;
+    
+    // Get audio format
+    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+    
+    if (!format?.decipher) {
+      console.log('[YT-Prod] No audio format found');
+      return null;
+    }
+    
+    const audioUrl = format.decipher(yt.session.player);
+    
+    return { title, channel, duration, audioUrl };
+  } catch (error) {
+    console.error('[YT-Prod] youtubei.js error:', error);
+    return null;
+  }
 }
 
 async function handleProductionRequest(body: any): Promise<NextResponse> {
-  const { url, startTime, endTime } = body;
+  const { url } = body;
   const id = videoId(url);
   if (!id) return NextResponse.json({ error: 'Invalid URL', message: 'Not a valid YouTube URL' }, { status: 400 });
 
   console.log(`[YT-Prod] Video: ${id}`);
-  let info = await getPipedInfo(id);
-  if (!info) info = await getCobaltInfo(id);
-  if (!info?.audioUrl) return NextResponse.json({ error: 'Extraction failed', message: 'Unable to extract audio. Please try a different video.' }, { status: 503 });
+  
+  const info = await getYoutubeInfo(id);
+  
+  if (!info?.audioUrl) {
+    return NextResponse.json({ 
+      error: 'Extraction failed', 
+      message: 'Unable to extract audio. YouTube may be blocking this request. Try again later or use a different video.' 
+    }, { status: 503 });
+  }
 
-  console.log('[YT-Prod] Downloading...');
-  const r = await fetchTimeout(info.audioUrl, {}, 60000);
-  if (!r.ok) return NextResponse.json({ error: 'Download failed' }, { status: 500 });
-  const buf = Buffer.from(await r.arrayBuffer());
-  console.log(`[YT-Prod] Done: ${(buf.length / 1024 / 1024).toFixed(1)}MB`);
+  console.log(`[YT-Prod] Got audio URL, downloading...`);
+  
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+    
+    const response = await fetch(info.audioUrl, { 
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    clearTimeout(timeout);
+    
+    if (!response.ok) {
+      console.log(`[YT-Prod] Download failed: ${response.status}`);
+      return NextResponse.json({ error: 'Download failed', message: 'Could not download audio stream' }, { status: 500 });
+    }
+    
+    const buf = Buffer.from(await response.arrayBuffer());
+    console.log(`[YT-Prod] Done: ${(buf.length / 1024 / 1024).toFixed(1)}MB`);
 
-  return new NextResponse(buf, {
-    headers: {
-      'Content-Type': 'audio/mpeg', 'Content-Length': buf.length.toString(),
-      'X-Video-Title': encodeURIComponent(info.title), 'X-Video-Channel': encodeURIComponent(info.channel), 'X-Video-Duration': String(info.duration),
-    },
-  });
+    return new NextResponse(buf, {
+      headers: {
+        'Content-Type': 'audio/webm',
+        'Content-Length': buf.length.toString(),
+        'X-Video-Title': encodeURIComponent(info.title),
+        'X-Video-Channel': encodeURIComponent(info.channel),
+        'X-Video-Duration': String(info.duration),
+      },
+    });
+  } catch (error) {
+    console.error('[YT-Prod] Download error:', error);
+    return NextResponse.json({ error: 'Download failed', message: 'Network error during download' }, { status: 500 });
+  }
 }
 
 async function handleProductionGet(url: string): Promise<NextResponse> {
   const id = videoId(url);
   if (!id) return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
-  const info = await getPipedInfo(id);
-  if (info) return NextResponse.json({ title: info.title, duration: info.duration, channel: info.channel, thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg` });
-  return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  
+  const info = await getYoutubeInfo(id);
+  if (info) {
+    return NextResponse.json({ 
+      title: info.title, 
+      duration: info.duration, 
+      channel: info.channel, 
+      thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg` 
+    });
+  }
+  return NextResponse.json({ error: 'Failed to get video info' }, { status: 500 });
 }
 
 // ============================================
@@ -193,8 +217,11 @@ async function handleLocalGet(url: string): Promise<NextResponse> {
 // ============================================
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  if (IS_PRODUCTION) { console.log('[YT] Production mode'); return handleProductionRequest(body); }
-  console.log('[YT] Local mode');
+  if (IS_PRODUCTION) { 
+    console.log('[YT] Production mode (youtubei.js)'); 
+    return handleProductionRequest(body); 
+  }
+  console.log('[YT] Local mode (yt-dlp)');
   return handleLocalRequest(body);
 }
 
